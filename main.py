@@ -5,6 +5,21 @@ from AlienInvasion import Game, Level, Player, Weapon1, StandardEnemy
 game = Game()
 level1 = Level(parent=game)
 
+level1.sprite_collections["explosion1"] = [
+    "images/explosions/explosion1_1.png",
+    "images/explosions/explosion1_2.png",
+    "images/explosions/explosion1_3.png",
+    "images/explosions/explosion1_4.png"
+    ]
+
+level1.sprite_collections["explosion2"] = [
+    "images/explosions/explosion2_1.png",
+    "images/explosions/explosion2_2.png",
+    "images/explosions/explosion2_3.png",
+    "images/explosions/explosion2_4.png"
+    
+    ]
+
 
 # player
 weapon1 = Weapon1(max_shoot_cooldown=0.1, parent=game)
@@ -40,12 +55,6 @@ def instantiate_enemies():
 instantiate_enemies()
 
 level1.enemies = [enemy1, enemy2, enemy3, enemy4]
-level1.sprite_collections["explosion1"] = [
-    "images/explosions/explosion1_1.png",
-    "images/explosions/explosion1_2.png",
-    "images/explosions/explosion1_3.png",
-    "images/explosions/explosion1_4.png"
-    ]
 
 
 instantiate_enemies()

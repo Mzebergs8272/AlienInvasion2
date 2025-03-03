@@ -1,7 +1,9 @@
 import pygame as pg, sys, math, os, random
 from abc import abstractmethod, ABCMeta
 
-
+# TODO: create ship death animations
+# TODO: create bullet animations
+# TODO: 
 
 class Game:
     def __init__(self):
@@ -50,17 +52,26 @@ class Level:
         self.dt = 0
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
-        self.sprite_collections: dict[str: list[pg.Surface]] = {"explosion1": []}
+        self.sprite_collections: dict[str: list[pg.Surface]] = {"explosion1": [],
+                                                                "explosion2": []
+                                                                }
+
+        # pg.mouse.set_visible(False)
         
+    
     def load_sprites(self):
         for name, collection in self.sprite_collections.items():
             self.sprite_collections[name] = [pg.image.load(path) for path in collection]
+        
+        print(self.sprite_collections)
 
     def check_events(self) -> None:
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 pg.quit()
                 sys.exit()
+            if event.type == pg.MOUSEMOTION:
+                pg.event.set_grab(True)
     
     def is_rect_onscreen(self, rect: pg.Rect) -> bool:
         if 0 < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - rect.height:
@@ -68,7 +79,6 @@ class Level:
         return False
     
     def handle_enemies(self) -> None:
-        # print(self.enemies)
         if not self.enemies and self.enemy_queue:
             self.enemies = self.enemy_queue.pop()
             print(len(self.enemies))
@@ -82,44 +92,38 @@ class Level:
             self.check_events()
             self.parent.screen.fill("black")
 
+            # order of rendering: enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
+
             for enemy in self.enemies: 
                 if enemy.is_alive:
                     enemy.update_position()
                     enemy.draw()
-                    next(enemy.shoot(180))
-                    next(enemy.weapon.update_rounds())
-                    enemy.handle_bullet_collision()
-                else:
-                    next(enemy.death_animation())
             else:
                 self.handle_enemies()
 
             if self.player.is_alive:
                 self.player.draw()
 
-                if 0 < pg.mouse.get_pos()[0] < self.parent.screen_w - self.player.rect.width//3 and \
-                    0 < pg.mouse.get_pos()[1] < self.parent.screen_h - self.player.rect.height//3:
+                if 0 < pg.mouse.get_pos()[0] < self.parent.screen_w and \
+                    0 < pg.mouse.get_pos()[1] < self.parent.screen_h:
                     self.player.rect.x, self.player.rect.y = pg.mouse.get_pos()[0] - self.player.rect.width//2, pg.mouse.get_pos()[1] - self.player.rect.height//2
                     
-                # if self.keys[pg.K_d] and self.player.rect.x < self.parent.screen_w - self.player.rect.width:
-                #     self.player.movex(1)
-                # if self.keys[pg.K_a] and 0 < self.player.rect.x:
-                #     self.player.movex(-1)
-                # if self.keys[pg.K_w] and 0 < self.player.rect.y:
-                #     self.player.movey(-1)
-                # if self.keys[pg.K_s] and self.player.rect.y < self.parent.screen_h - self.player.rect.height:
-                #     self.player.movey(1)
-                
                 if self.keys[pg.K_SPACE] or pg.mouse.get_pressed()[0]:
                     self.player.shoot(0)
 
                 next(self.player.weapon.update_rounds())
-                self.player.handle_bullet_collision()
+                self.player.handle_bullet_collision() 
             else:
                 next(self.player.death_animation())
-
             
-            
+            for enemy in self.enemies:
+                if enemy.is_alive:
+                    next(enemy.shoot(180))
+                    next(enemy.weapon.update_rounds())
+                    enemy.handle_bullet_collision()
+                else:
+                    next(enemy.death_animation())
+                
             pg.display.update()
             self.dt = self.clock.tick(60) / 1000
 
@@ -140,15 +144,13 @@ class Round:
 
         self.is_alive = True
 
-        
-
         # death animation
         self.sprite_list: list[pg.Surface] = self.parent.parent.parent.sprite_collections["explosion1"]
         self.death_anim_duration = 0.2
         self.max_sprite_frame_duration = self.death_anim_duration / len(self.sprite_list)
         self.sprite_frame_duration = self.max_sprite_frame_duration
         self.sprite_frame_index = 0
-        self.sprite_size: list[int, int] = [25, 25]
+        self.sprite_size: list[int, int] = [35, 35]
 
     def draw(self):
         pg.draw.rect(self.game.screen, (255, 0, 0), self.rect)
@@ -239,20 +241,50 @@ class Ship(metaclass=ABCMeta):
         self.game: Game = self.parent.parent
         self.weapon: Weapon = weapon
 
-        self.max_health = 100
-        self.health = self.max_health
+        #health
+        self.max_health: float = 100
+        self.health: float = self.max_health
+
+        # hit indication
+        self.max_hit_indication_duration: float = 0.1
+        self.hit_indication_duration: float = 0
+        self.image_hit: pg.Surface = None
+
+        # death animation
+        self.death_anim_duration: float = 0.5
+        self.is_alive: bool = True
+
+        # ship sprite
+        self.image: pg.Surface = None
+        self.rect: pg.Rect = None
 
     @abstractmethod
     def shoot(self, angle: int) -> None:
         pass
 
-    @abstractmethod
     def draw(self) -> None:
-        pass
+        self.game.screen.blit(self.image, self.rect)
+
+        if self.hit_indication_duration > 0:
+            next(self.hit_indication_anim())
 
     @abstractmethod
     def handle_health(self):
         pass
+
+    def take_damage(self, amount: float):
+        self.health -= amount
+        
+        if self.health > 0:
+            self.hit_indication_duration = self.max_hit_indication_duration
+    
+    def hit_indication_anim(self):
+        while self.hit_indication_duration:
+            self.game.screen.blit(self.image_hit, self.rect)
+            self.hit_indication_duration -= self.parent.dt
+            yield
+
+        yield
         
 
 
@@ -264,43 +296,26 @@ class Player(Ship):
         self.position: list[int, int] = position
 
         self.vel: int = 10
+
+        # ship sprite
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load("images/player/player_ship.png"), 270), (self.width, self.height))
         self.rect = self.image.get_rect(top=position[0], left=position[1])
 
-        self.death_anim_duration: float = 0.5
-        self.is_alive = True
-
         # hit/damage indication
         self.image_hit = pg.transform.scale(pg.transform.rotate(pg.image.load("images/player/player_ship_hit1.png"), 270), (self.width, self.height))
-        self.max_hit_indication_duration = 0.1
-        self.hit_indication_duration = 0
+        
+
+        # death animation
+        self.sprite_list: list[pg.Surface] = self.parent.sprite_collections["explosion2"]
+        self.death_anim_duration = 0.2
+        self.max_sprite_frame_duration = self.death_anim_duration / len(self.sprite_list)
+        self.sprite_frame_duration = self.max_sprite_frame_duration
+        self.sprite_frame_index = 0
+        self.sprite_size: list[int, int] = [50, 50]
+        
 
     def shoot(self, angle: int) -> None:
         self.weapon.shoot(angle)
-        
-    # direction: -1 | 1
-    def movex(self, direction: int) -> None:
-        if direction != 1 and direction != -1:
-            print("incorrect direction value for movex", self)
-            return
-       
-        self.rect.x += self.vel * direction
-        self.position[0] += self.vel * direction
-
-    def movey(self, direction: int) -> None:
-        if direction != 1 and direction != -1:
-            print("incorrect direction value for movey", self)
-            return
-
-        
-        self.rect.y += self.vel * direction
-        self.position[1] += self.vel * direction
-            
-    def draw(self) -> None:
-        self.game.screen.blit(self.image, self.rect)
-
-        if self.hit_indication_duration > 0:
-            next(self.hit_indication_anim())
     
     def handle_bullet_collision(self) -> None:
         for round in self.weapon.rounds:
@@ -318,33 +333,35 @@ class Player(Ship):
         
         if self.death_anim_duration <= 0:
             self.rect = None
-    
 
     def death_animation(self):
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
-            pg.draw.rect(self.game.screen, (255, 0, 0), self.rect)
-            self.death_anim_duration -= self.parent.dt
+            while self.sprite_frame_duration > 0:
+                print(self.sprite_list[self.sprite_frame_index])
+                # note for error: player is initialised before the load sprites function runs, 
+                self.game.screen.blit(
+                    pg.transform.scale(
+                        self.sprite_list[self.sprite_frame_index], 
+                        self.sprite_size
+                    ), 
+                    (
+                        self.rect.x - self.sprite_size[0]//2 + random.choice([x for x in range(-25, 25)]), 
+                        self.rect.y - self.sprite_size[1]//2 + random.choice([y for y in range(-25, 25)])
+                    )
+                )
+
+                self.death_anim_duration -= self.parent.dt
+                self.sprite_frame_duration -= self.parent.dt
+                yield
+
+            self.sprite_frame_index += 1
+            self.sprite_frame_duration = self.max_sprite_frame_duration
             
-            yield
-        
         self.rect = None
 
-        yield
-    
-    def take_damage(self, amount: float):
-        self.health -= amount
+        yield     
         
-        if self.health > 0:
-            self.hit_indication_duration = self.max_hit_indication_duration
-    
-    def hit_indication_anim(self):
-        while self.hit_indication_duration:
-            self.game.screen.blit(self.image_hit, self.rect)
-            self.hit_indication_duration -= self.parent.dt
-            yield
-
-        yield
-            
+          
                     
                 
 
