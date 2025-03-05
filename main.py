@@ -1,9 +1,35 @@
-from AlienInvasion import Game, Level, Player, Weapon1, StandardEnemy
+from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, StandardEnemy
 
 
 
 game = Game()
 level1 = Level(parent=game)
+
+
+def instantiate_fleet(num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
+    fleet = []
+
+    for i in range(1, num+1):
+
+        enemy: Ship = StandardEnemy(level1, [left, top + (spacing * i)])
+        enemy.rect.width = kwargs.get("width", enemy.width)
+        enemy.rect.height = kwargs.get("height", enemy.height)
+
+        if kwargs.get("weapon"):
+            enemy_weapon = kwargs.get("weapon")(game=game, max_shoot_cooldown=0, parent=enemy)
+        else:
+            enemy_weapon = Weapon1(game=game, max_shoot_cooldown=0, parent=enemy)
+
+        # enemy_weapon: Weapon = kwargs.get("weapon", )
+        enemy.weapon = enemy_weapon
+        enemy.random_shoot_cooldowns = kwargs.get("random_shoot_cooldowns", [1, 1,5, 2, 2.5, 3])
+        enemy_weapon.round_color = kwargs.get("round_color", (0, 150, 255))
+        enemy_weapon.round_size = kwargs.get("round_size", (7, 5))
+
+        fleet.append(enemy)
+        
+    return fleet
+
 
 level1.sprite_collections["explosion1"] = [
     "images/explosions/explosion1_1.png",
@@ -18,46 +44,24 @@ level1.sprite_collections["explosion2"] = [
     "images/explosions/explosion2_3.png",
     "images/explosions/explosion2_4.png"
     
-    ]
+]
 
 
 # player
-weapon1 = Weapon1(max_shoot_cooldown=0.1, parent=game)
-player = Player(parent=level1, weapon=weapon1)
+
+player = Player(parent=level1)
+weapon1 = Weapon1(game=game, max_shoot_cooldown=0.1, parent=player)
+player.weapon = weapon1
 player.vel = 10
-weapon1.parent = player
+
 level1.player = player
 
-
-def instantiate_enemies():
-    global enemy1, enemy2, enemy3, enemy4
-    # enemies
-    enemy_weapon1 = Weapon1(max_shoot_cooldown=0, parent=game)
-    enemy1 = StandardEnemy(level1, enemy_weapon1, [1050, 70])
-    enemy1.random_shoot_cooldowns = [1, 1,5, 2, 2.5, 3]
-    enemy_weapon1.parent = enemy1
-
-    enemy_weapon2 = Weapon1(max_shoot_cooldown=0, parent=game)
-    enemy2 = StandardEnemy(level1, enemy_weapon2, [1050, 190])
-    enemy2.random_shoot_cooldowns = [1, 1,5, 2, 2.5, 3]
-    enemy_weapon2.parent = enemy2
-
-    enemy_weapon3 = Weapon1(max_shoot_cooldown=0, parent=game)
-    enemy3 = StandardEnemy(level1, enemy_weapon3, [1050, 310])
-    enemy3.random_shoot_cooldowns = [1, 1, 5, 2, 2.5, 3]
-    enemy_weapon3.parent = enemy3
-
-    enemy_weapon4 = Weapon1(max_shoot_cooldown=0, parent=game)
-    enemy4 = StandardEnemy(level1, enemy_weapon4, [1050, 430])
-    enemy4.random_shoot_cooldowns = [1, 1,5, 2, 2.5, 3]
-    enemy_weapon4.parent = enemy4
-
-instantiate_enemies()
-
-level1.enemies = [enemy1, enemy2, enemy3, enemy4]
+level1.enemies = instantiate_fleet(3, 1050, 70, 100)
 
 
-instantiate_enemies()
-level1.enemy_queue.append([enemy1, enemy2, enemy3, enemy4])
+level1.enemy_queue.append(instantiate_fleet(3, 1050, 70, 100))
+
+
+
 game.levels = [level1]
 game.start()
