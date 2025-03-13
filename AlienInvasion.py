@@ -1,21 +1,26 @@
-import pygame as pg, sys, math, os, random
+import pygame as pg, sys, math, os, random, colorsys
 from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet animations
 
-
 class Game:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.running: bool = True
         self.levels: list[Level] = []
-        
-        self.screen_w = 1200
-        self.screen_h = 600
-        self.screen = pg.display.set_mode((self.screen_w, self.screen_h))
-
-        self.clock = pg.time.Clock()
+        self.screen_w: int = kwargs.get("screen_w", 1400)
+        self.screen_h: int = kwargs.get("screen_h", 750)    
+        self.screen: pg.Surface = pg.display.set_mode((self.screen_w, self.screen_h))
+        self.fps: int = kwargs.get("fps", 60)
+        self.clock: pg.time.Clock = pg.time.Clock()
 
         pg.display.set_caption("Alien Invasion 2")
+
+        # interface
+        self.interface_w: int = kwargs.get("interface_w", 100)
+        self.interface_health_bar_max_h = 300
+
+        self.interface_health_bar: pg.Rect = pg.Rect(10, 10, 80, self.interface_health_bar_max_h)
+        self.interface_health_bar_background = pg.Rect(10, 10, 80, self.interface_health_bar_max_h)
 
     def check_events(self) -> None:
         for event in pg.event.get():
@@ -34,8 +39,25 @@ class Game:
                 level.start()
 
                 pg.display.flip()
-                self.clock.tick(60)
+                self.clock.tick(self.fps)
     
+    def draw_player_health(self, health, max_health):
+        while health > 0:
+            pg.draw.rect(self.screen, (0, 0, 0), self.interface_health_bar_background)
+            hls = colorsys.hls_to_rgb((self.interface_health_bar.height / self.interface_health_bar_max_h * 100)/360, 0.5, 1)
+
+            while self.interface_health_bar.height > health / max_health * self.interface_health_bar_max_h:
+                self.interface_health_bar.height -= 2
+                break
+           
+            pg.draw.rect(self.screen, list((i*255 for i in hls)), self.interface_health_bar)
+
+            yield
+        yield
+
+    def draw_interface(self):
+        pg.draw.rect(self.screen, (50, 50, 50), (0, 0, self.interface_w, self.screen_h))
+            
 
                 
 class Level:
@@ -52,12 +74,12 @@ class Level:
 
         self.keys = None
 
+        # pg.mouse.set_visible(False)
+
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
                                                                 
-
         self.load_sprites()
-        print(self.sprite_collections)
 
     def load_sprites(self):
         for name, collection in self.sprite_collections.items():
@@ -70,16 +92,15 @@ class Level:
                 sys.exit()
             if event.type == pg.MOUSEMOTION:
                 pg.event.set_grab(True)
-    
+            
     def is_rect_onscreen(self, rect: pg.Rect) -> bool:
-        if 0 < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - rect.height:
+        if self.parent.interface_w < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - rect.height:
             return True
         return False
     
     def handle_enemies(self) -> None:
         if not self.enemies and self.enemy_queue:
             self.enemies = self.enemy_queue.pop()
-            print(len(self.enemies))
 
     def start(self) -> None:
         while self.running:
@@ -102,11 +123,8 @@ class Level:
             if self.player.is_alive:
                 self.player.draw()
 
-                if 0 < pg.mouse.get_pos()[0] < self.parent.screen_w and \
-                    0 < pg.mouse.get_pos()[1] < self.parent.screen_h:
-                    self.player.rect.x, self.player.rect.y = pg.mouse.get_pos()[0] - self.player.rect.width//2, pg.mouse.get_pos()[1] - self.player.rect.height//2
-                    
-                next(self.player.shoot(0))
+                next(self.player.move_to_cursor())
+                if self.is_rect_onscreen(self.player.rect): next(self.player.shoot(0))
                 next(self.player.weapon.update_rounds())
                 self.player.handle_bullet_collision() 
             else:
@@ -121,10 +139,12 @@ class Level:
                 else:
                     next(enemy.death_animation())
 
+            self.parent.draw_interface()
+            next(self.parent.draw_player_health(self.player.health, self.player.max_health))
             
-                
+
             pg.display.update()
-            self.dt = self.clock.tick(60) / 1000
+            self.dt = self.clock.tick(self.parent.fps) / 1000
 
 
 # for weapons
@@ -202,8 +222,10 @@ class Weapon(metaclass=ABCMeta):
         self.max_shoot_cooldown: float = kwargs.get("max_shoot_cooldown", 0.2)
         self.shoot_cooldown: float = kwargs.get("shoot_cooldown", self.max_shoot_cooldown)
 
+        
+
     @abstractmethod
-    def shoot(self):
+    def shoot(self, angle: int, round_spawn_position: list[int, int]):
         pass
 
     # draws and updates round positions
@@ -219,7 +241,7 @@ class Weapon1(Weapon):
 
     def shoot(self, angle: int, round_spawn_position: list[int, int]):
         while True:
-
+            
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
             if self.shoot_cooldown <= 0:
                 round = Round(
@@ -242,12 +264,11 @@ class Weapon1(Weapon):
             self.rounds = [r for r in self.rounds if r.rect is not None]
             
             for round in self.rounds:
-                if round.is_alive and self.parent.parent.is_rect_onscreen(round.rect):
+                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect):
                     round.draw()
                 
                     upwards = math.sin(math.radians(round.angle))
                     right = math.cos(math.radians(round.angle))
-
                     round.rect.x += right * round.vel
                     round.rect.y += upwards * round.vel
                 else:
@@ -259,6 +280,111 @@ class Weapon1(Weapon):
         yield
 
 
+
+class Weapon2(Weapon1):
+    def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.bullet_offset_y = kwargs.get("bullet_offset_y", 10)
+        
+    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+        while True:
+
+            if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
+            if self.shoot_cooldown <= 0:
+                round1 = Round(
+                    self.currentLevel, 
+                    self, angle=angle, 
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] + self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color
+                )
+                round2 = Round(
+                    self.currentLevel,
+                    self, angle=angle,
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] - self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color
+                )
+            
+                self.rounds.append(round1)
+                self.rounds.append(round2)
+                self.shoot_cooldown = self.max_shoot_cooldown
+
+            yield
+        
+   
+
+class Weapon3(Weapon2):
+    def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.curr_round_angle: float = None
+
+        self.upper_bound_offset: float = kwargs.get("max_upper_bound", 30)
+        self.lower_bound_offset: float = kwargs.get("max_lower_bound", 30)
+       
+        self.rotation_speed: float = kwargs.get("rotation_speed", 2)
+
+        self.switch: bool = True
+
+    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+        while True:
+
+            if self.curr_round_angle is None:
+                self.curr_round_angle = angle
+                self.upper_bound_offset = angle - self.upper_bound_offset
+                self.lower_bound_offset = angle + self.lower_bound_offset
+            
+
+            if self.switch:
+                if self.curr_round_angle > self.upper_bound_offset:
+                    self.curr_round_angle -= self.rotation_speed
+                else:
+                    self.switch = False
+
+            if not self.switch:
+                if self.curr_round_angle < self.lower_bound_offset:
+                    self.curr_round_angle += self.rotation_speed
+                else:
+                    self.switch = True
+
+            if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
+            if self.shoot_cooldown <= 0:
+
+                round1 = Round(
+                    self.currentLevel, 
+                    self, angle=self.curr_round_angle, 
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] + self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color,
+                    vel=self.round_vel
+                )
+
+                round2 = Round(
+                    self.currentLevel, 
+                    self, angle=self.curr_round_angle, 
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] - self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color,
+                    vel=self.round_vel
+                )
+
+                self.rounds.append(round1)
+                self.rounds.append(round2)
+                self.shoot_cooldown = self.max_shoot_cooldown
+
+            yield
+        
+  
 
 class Ship(metaclass=ABCMeta):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
@@ -285,15 +411,16 @@ class Ship(metaclass=ABCMeta):
         # death animation
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
         self.sprite_collection: list[pg.Surface] = self.parent.sprite_collections.get(self.sprite_collection_name)
-        self.death_anim_duration = kwargs.get("death_anim_duration", 0.5)
-        self.max_sprite_frame_duration = self.death_anim_duration / len(self.sprite_collection)
-        self.sprite_frame_duration = self.max_sprite_frame_duration
-        self.sprite_frame_index = 0
+        self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5)
+        self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection)
+        self.sprite_frame_duration: float = self.max_sprite_frame_duration
+        self.sprite_frame_index: int = 0
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [100, 100])
         
         # ship sprite
+        self.angle = kwargs.get("angle", 270)
         self.image_path: str = kwargs.get("image_path", "images/player/player_ship.png")
-        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
         self.rect: pg.Rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
         
         # hit/damage indication
@@ -327,6 +454,24 @@ class Ship(metaclass=ABCMeta):
             yield
 
         yield
+
+    def death_animation(self):
+        if not isinstance(self.sprite_collection[0], pg.Surface): self.sprite_collection = self.currentLevel.sprite_collections["explosion2"]
+        while not self.is_alive and self.rect and self.death_anim_duration > 0:
+            while self.sprite_frame_duration > 0:
+                self.currentLevel.parent.screen.blit(
+                    pg.transform.scale(self.sprite_collection[self.sprite_frame_index], self.sprite_size), (self.rect.x + ((self.rect.width - self.sprite_size[0])//2), self.rect.y + ((self.rect.height - self.sprite_size[1])//2)))
+
+                self.death_anim_duration -= self.currentLevel.dt
+                self.sprite_frame_duration -= self.currentLevel.dt
+                yield
+
+            self.sprite_frame_index += 1
+            self.sprite_frame_duration = self.max_sprite_frame_duration
+
+        self.rect = None
+
+        yield  
         
 
 
@@ -334,7 +479,7 @@ class Player(Ship):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
 
-        self.vel = kwargs.get("vel", 10)
+        self.vel = kwargs.get("vel", 1)
  
     def shoot(self, angle: int):
         while True:
@@ -359,39 +504,34 @@ class Player(Ship):
         
         if self.death_anim_duration <= 0:
             self.rect = None
+    
+    def move_to_cursor(self):
+        while True:
+            mouse_pos = pg.mouse.get_pos()
+            player_pos = [self.rect.x + self.rect.width//2, self.rect.y + self.rect.height//2]
+            adj = mouse_pos[0] - player_pos[0]
+            opp = mouse_pos[1] - player_pos[1]
+            hyp = math.sqrt(adj ** 2 + opp ** 2)
 
-    def death_animation(self):
-        if not isinstance(self.sprite_collection[0], pg.Surface): self.sprite_collection = self.parent.sprite_collections["explosion2"]
-        while not self.is_alive and self.rect and self.death_anim_duration > 0:
-            while self.sprite_frame_duration > 0:
-                self.currentLevel.parent.screen.blit(
-                    pg.transform.scale(
-                        self.sprite_collection[self.sprite_frame_index], 
-                        self.sprite_size
-                    ), 
-                    (
-                        self.rect.x + self.sprite_size[0]//2 + random.choice([x for x in range(-75, 75)]), 
-                        self.rect.y + self.sprite_size[1]//2 + random.choice([y for y in range(-50, 50)])
-                    )
-                )
+            if hyp != 0:
+                sin = opp / hyp
+                cos = adj / hyp
 
-                self.death_anim_duration -= self.currentLevel.dt
-                self.sprite_frame_duration -= self.currentLevel.dt
-                yield
+                # multiply each ratio by hyp. because the further the cursor (and the longer the hyp), 
+                # the faster the ship
+                self.rect.x += cos * hyp * 0.35
+                self.rect.y += sin * hyp * 0.35
+           
+            yield
 
-            self.sprite_frame_index += 1
-            self.sprite_frame_duration = self.max_sprite_frame_duration
 
-        yield     
-        
-          
 
 class StandardEnemy(Ship):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
 
         # ship sprite
-        self.image_path: str = kwargs.get("image_path", "images/enemy/enemy_ship1.png")
+        self.image_path = kwargs.get("image_path", "images/enemy/enemy_ship1.png")
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
 
         self.random_shoot_cooldowns: list[float] = kwargs.get("random_shoot_cooldowns", [1, 1,5, 2, 2.5, 3])
@@ -406,14 +546,14 @@ class StandardEnemy(Ship):
         # animation on spawn
         self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
         self.move_in_vel: float = kwargs.get("move_in_vel", 5)
+        self.move_in_offset: int = kwargs.get("move_in_offset", 300)
 
         # hit/damage indication
-        self.image_hit_path: str = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
-        self.image_hit: pg.Surface = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
-
+        self.image_hit_path = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
+        self.image_hit = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
+    
     def shoot(self, angle: int):
         while True:
-            print(self.weapon.shoot_cooldown)
             if self.shoot_cooldown is None:
                 if self.random_shoot_cooldowns:
                     self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
@@ -421,8 +561,8 @@ class StandardEnemy(Ship):
                     self.shoot_cooldown = 1
         
             self.shoot_cooldown -= self.currentLevel.dt
-
             self.weapon.shoot_cooldown -= self.currentLevel.dt
+
             if self.shoot_cooldown <= 0 and self.parent.is_rect_onscreen(self.rect):
                 next(self.weapon.shoot(angle, [self.rect.x, self.rect.y + self.rect.height//2]))
                 self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
@@ -431,7 +571,7 @@ class StandardEnemy(Ship):
 
     def move_in_anim(self):
         if self.rect.x == self.spawn_position[0]:
-            self.rect.x += 300
+            self.rect.x += self.move_in_offset
         while self.rect.x > self.spawn_position[0]:
             self.rect.x -= self.move_in_vel
         
@@ -465,26 +605,5 @@ class StandardEnemy(Ship):
                 player.take_damage(self.weapon.damage)
                 round.is_alive = False
                 player.handle_health()
-    
-    def death_animation(self):
-        if not isinstance(self.sprite_collection[0], pg.Surface): self.sprite_collection = self.currentLevel.sprite_collections["explosion2"]
-        while not self.is_alive and self.rect and self.death_anim_duration > 0:
-            while self.sprite_frame_duration > 0:
-                self.currentLevel.parent.screen.blit(
-                    pg.transform.scale(self.sprite_collection[self.sprite_frame_index], self.sprite_size), (self.rect.x, self.rect.y))
-
-                self.death_anim_duration -= self.currentLevel.dt
-                self.sprite_frame_duration -= self.currentLevel.dt
-                yield
-
-            self.sprite_frame_index += 1
-            self.sprite_frame_duration = self.max_sprite_frame_duration
-
-        self.rect = None
-
-        yield  
-
-
-
 
 
