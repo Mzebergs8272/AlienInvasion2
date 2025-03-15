@@ -1,4 +1,4 @@
-import pygame as pg, sys, math, os, random, colorsys
+import pygame as pg, sys, math, os, random, colorsys, cv2
 from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet animations
@@ -73,6 +73,12 @@ class Level:
         self.dt = 0
 
         self.keys = None
+        
+        self.bg_vid_url: str = "space_background_1.mp4"
+        self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
+        self.bg_vid.set(3, 10)
+        self.bg_vid.set(4,10)
+        self.bg_vid_fps = self.bg_vid.get(cv2.CAP_PROP_FPS)
 
         # pg.mouse.set_visible(False)
 
@@ -106,7 +112,17 @@ class Level:
         while self.running:
             self.keys = pg.key.get_pressed()
             self.check_events()
+
             self.parent.screen.fill("black")
+
+            success, bg_vid_image = self.bg_vid.read()
+
+            if success:
+                resize = cv2.resize(bg_vid_image, (self.parent.screen_w, self.parent.screen_h)) 
+                bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
+            else:
+                self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
+            self.parent.screen.blit(bg_vid_surface, (0, 0))
 
             # order of rendering: enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
             
@@ -124,16 +140,16 @@ class Level:
                 self.player.draw()
 
                 next(self.player.move_to_cursor())
-                if self.is_rect_onscreen(self.player.rect): next(self.player.shoot(0))
+                if self.is_rect_onscreen(self.player.rect): next(self.player.shoot())
                 next(self.player.weapon.update_rounds())
                 self.player.handle_bullet_collision() 
             else:
                 next(self.player.death_animation())
             
             for enemy in self.enemies:
-                
+             
                 if enemy.is_alive:
-                    next(enemy.shoot(180))
+                    next(enemy.shoot())
                     next(enemy.weapon.update_rounds())
                     enemy.handle_bullet_collision()
                 else:
@@ -222,10 +238,12 @@ class Weapon(metaclass=ABCMeta):
         self.max_shoot_cooldown: float = kwargs.get("max_shoot_cooldown", 0.2)
         self.shoot_cooldown: float = kwargs.get("shoot_cooldown", self.max_shoot_cooldown)
 
+        self.shoot_angle: float = kwargs.get("shoot_angle", 0)
+
         
 
     @abstractmethod
-    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+    def shoot(self, round_spawn_position: list[int, int]):
         pass
 
     # draws and updates round positions
@@ -239,14 +257,14 @@ class Weapon1(Weapon):
     def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
 
-    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+    def shoot(self, round_spawn_position: list[int, int]):
         while True:
             
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
             if self.shoot_cooldown <= 0:
                 round = Round(
                     self.currentLevel, 
-                    self, angle=angle, 
+                    self, angle=self.shoot_angle, 
                     spawn_position=round_spawn_position, 
                     sprite_collection_name=self.round_sprite_collection_name
                 )
@@ -266,9 +284,14 @@ class Weapon1(Weapon):
             for round in self.rounds:
                 if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect):
                     round.draw()
-                
+                    
                     upwards = math.sin(math.radians(round.angle))
                     right = math.cos(math.radians(round.angle))
+
+                    if isinstance(self.parent, Player):
+                        print(round.angle)
+                        print(upwards, right)
+                    
                     round.rect.x += right * round.vel
                     round.rect.y += upwards * round.vel
                 else:
@@ -287,14 +310,15 @@ class Weapon2(Weapon1):
 
         self.bullet_offset_y = kwargs.get("bullet_offset_y", 10)
         
-    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+    def shoot(self, round_spawn_position: list[int, int]):
         while True:
 
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
             if self.shoot_cooldown <= 0:
                 round1 = Round(
                     self.currentLevel, 
-                    self, angle=angle, 
+                    self, 
+                    angle=self.shoot_angle, 
                     spawn_position=[round_spawn_position[0], round_spawn_position[1] + self.bullet_offset_y], 
                     sprite_collection_name=self.round_sprite_collection_name,
                     width=self.round_size[0],
@@ -303,7 +327,8 @@ class Weapon2(Weapon1):
                 )
                 round2 = Round(
                     self.currentLevel,
-                    self, angle=angle,
+                    self, 
+                    angle=self.shoot_angle,
                     spawn_position=[round_spawn_position[0], round_spawn_position[1] - self.bullet_offset_y], 
                     sprite_collection_name=self.round_sprite_collection_name,
                     width=self.round_size[0],
@@ -332,13 +357,13 @@ class Weapon3(Weapon2):
 
         self.switch: bool = True
 
-    def shoot(self, angle: int, round_spawn_position: list[int, int]):
+    def shoot(self, round_spawn_position: list[int, int]):
         while True:
 
             if self.curr_round_angle is None:
-                self.curr_round_angle = angle
-                self.upper_bound_offset = angle - self.upper_bound_offset
-                self.lower_bound_offset = angle + self.lower_bound_offset
+                self.curr_round_angle = self.shoot_angle
+                self.upper_bound_offset = self.shoot_angle - self.upper_bound_offset
+                self.lower_bound_offset = self.shoot_angle + self.lower_bound_offset
             
 
             if self.switch:
@@ -358,7 +383,8 @@ class Weapon3(Weapon2):
 
                 round1 = Round(
                     self.currentLevel, 
-                    self, angle=self.curr_round_angle, 
+                    self, 
+                    angle=self.curr_round_angle, 
                     spawn_position=[round_spawn_position[0], round_spawn_position[1] + self.bullet_offset_y], 
                     sprite_collection_name=self.round_sprite_collection_name,
                     width=self.round_size[0],
@@ -369,7 +395,8 @@ class Weapon3(Weapon2):
 
                 round2 = Round(
                     self.currentLevel, 
-                    self, angle=self.curr_round_angle, 
+                    self, 
+                    angle=self.curr_round_angle, 
                     spawn_position=[round_spawn_position[0], round_spawn_position[1] - self.bullet_offset_y], 
                     sprite_collection_name=self.round_sprite_collection_name,
                     width=self.round_size[0],
@@ -383,8 +410,82 @@ class Weapon3(Weapon2):
                 self.shoot_cooldown = self.max_shoot_cooldown
 
             yield
+
+# TODO: fix closest_enemy logic
+# TODO: make compatible with enemies
+class Weapon4(Weapon2):
+    def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+        self.target_enemies: list[Ship] = []
+        self.closest_enemy: Ship = None
+        self.prev_enemy_dist: float = 9999
+
+    def get_closest_enemy_angle(self, round: Round) -> float:
+        adj = self.closest_enemy.rect.x + self.closest_enemy.width//2 - round.rect.x
+        opp = self.closest_enemy.rect.y + self.closest_enemy.height//2 - round.rect.y
+        hyp = math.sqrt(adj ** 2 + opp ** 2)
+
+        if hyp != 0:
+            # print(math.degrees(math.acos(adj / hyp)))
+            return math.degrees(math.acos(adj / hyp))
+        return self.shoot_angle
+    
+    def shoot(self, round_spawn_position: list[int, int]):
         
-  
+        if isinstance(self.parent, Player):
+            self.target_enemies = self.currentLevel.enemies
+        elif isinstance(self.parent, StandardEnemy):
+            self.target_enemies = [self.currentLevel.player]
+
+        while True:
+
+            if self.closest_enemy is None:
+                self.closest_enemy: Ship = self.target_enemies[0]
+            
+            for enemy in self.target_enemies:
+                if self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x:
+                    curr_enemy_dist = math.sqrt((self.parent.rect.x - enemy.rect.x)**2 + (self.parent.rect.y - enemy.rect.y)**2)
+                    if curr_enemy_dist < self.prev_enemy_dist and self.closest_enemy.is_alive or not self.closest_enemy.is_alive:
+                        self.closest_enemy = enemy
+                        self.prev_enemy_dist = curr_enemy_dist
+                        
+
+            if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
+            if self.shoot_cooldown <= 0:
+
+               
+
+                round1 = Round(
+                    self.currentLevel, 
+                    self,
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] + self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color
+                )
+                
+                round1.angle = -self.get_closest_enemy_angle(round1)
+                print(round1.angle)
+
+                round2 = Round(
+                    self.currentLevel,
+                    self, 
+                    angle=self.shoot_angle,
+                    spawn_position=[round_spawn_position[0], round_spawn_position[1] - self.bullet_offset_y], 
+                    sprite_collection_name=self.round_sprite_collection_name,
+                    width=self.round_size[0],
+                    height=self.round_size[1],
+                    color=self.round_color
+                )
+
+                round2.angle = -self.get_closest_enemy_angle(round2)
+            
+                self.rounds.append(round1)
+                self.rounds.append(round2)
+                self.shoot_cooldown = self.max_shoot_cooldown
+
+            yield
 
 class Ship(metaclass=ABCMeta):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
@@ -481,11 +582,11 @@ class Player(Ship):
 
         self.vel = kwargs.get("vel", 1)
  
-    def shoot(self, angle: int):
+    def shoot(self):
         while True:
             self.weapon.shoot_cooldown -= self.currentLevel.dt
             if self.currentLevel.keys[pg.K_SPACE] or pg.mouse.get_pressed()[0]:
-                next(self.weapon.shoot(angle, [self.rect.x + self.rect.width, self.rect.y + self.rect.height//2]))
+                next(self.weapon.shoot([self.rect.x + self.rect.width, self.rect.y + self.rect.height//2]))
             yield
 
     def handle_bullet_collision(self) -> None:
@@ -504,7 +605,7 @@ class Player(Ship):
         
         if self.death_anim_duration <= 0:
             self.rect = None
-    
+
     def move_to_cursor(self):
         while True:
             mouse_pos = pg.mouse.get_pos()
@@ -552,7 +653,7 @@ class StandardEnemy(Ship):
         self.image_hit_path = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
         self.image_hit = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
     
-    def shoot(self, angle: int):
+    def shoot(self):
         while True:
             if self.shoot_cooldown is None:
                 if self.random_shoot_cooldowns:
@@ -564,7 +665,7 @@ class StandardEnemy(Ship):
             self.weapon.shoot_cooldown -= self.currentLevel.dt
 
             if self.shoot_cooldown <= 0 and self.parent.is_rect_onscreen(self.rect):
-                next(self.weapon.shoot(angle, [self.rect.x, self.rect.y + self.rect.height//2]))
+                next(self.weapon.shoot([self.rect.x, self.rect.y + self.rect.height//2]))
                 self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
 
             yield

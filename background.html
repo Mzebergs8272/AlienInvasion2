@@ -1,0 +1,139 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>space</title>
+</head>
+<body>
+
+    <script>
+
+        for (i=0; i<150; i++) {
+
+            let star = document.createElement("div");
+            let duration = 5000 + Math.random() * 2500;
+
+            star.classList.add("star");
+            star.style.animationDuration = `${duration}ms`;
+            star.style.top = `${Math.random() * 4000}px`;
+            star.style.right = `${Math.random() * 1920}px`;
+
+            star.style.width = `${(duration / 1000) * duration / 1000 / 4}px`;
+            star.style.height = `${(duration / 1000) * duration / 1000 / 4}px`;
+
+            document.body.appendChild(star);
+
+        }
+
+    </script>
+
+    <style>
+
+        body {
+            background-color: black;
+        }
+
+        .star {
+            width: 5px;
+            height: 5px;
+            background-color: white;
+            position: absolute;
+            
+            animation: fly-past-1-speed-1 linear, fly-past-2-speed-1 linear 3s infinite;    
+            
+        }
+
+        @keyframes fly-past-1-speed-1 {
+           
+            to {
+                right: 100%;
+            }
+        }
+
+        @keyframes fly-past-2-speed-1 {
+            from {
+                right: -20px;
+            }
+            to {
+                right: 100%;
+            }
+        }
+    </style>
+
+
+
+
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Looping Star Animation with Varying Speeds</title>
+    <style>
+        body {
+            background-color: black;
+            overflow: hidden;
+            margin: 0;
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .star {
+            position: absolute;
+            background-color: white;
+            opacity: 0.8;
+            will-change: transform;
+            border-radius: 50%;
+        }
+
+        @keyframes fly-left {
+            from {
+                transform: translateX(100vw);
+            }
+            to {
+                transform: translateX(-10vw);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<script>
+    const numStars = 150;
+    const loopDuration = 30; // The full seamless cycle duration
+    const containerHeight = window.innerHeight;
+
+    
+
+    for (let i = 0; i < numStars; i++) {
+        let star = document.createElement("div");
+        star.classList.add("star");
+
+        // Random size: 1px or 7.5px
+        let size = Math.random() * 12;
+        star.style.width = `${size}px`;
+        star.style.height = `${size}px`;
+
+        // Random vertical position
+        star.style.top = `${Math.random() * containerHeight}px`;
+
+        // Define animation durations that divide evenly into 30s (e.g., 10s, 15s, 20s, 30s)
+        const possibleDurations = [25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 25, 50, 100, 10];
+        let duration = possibleDurations[Math.floor(Math.random() * possibleDurations.length)];
+
+        // Ensure seamless looping by evenly distributing the animation start time
+        let startOffset = Math.random() * duration;
+        star.style.animation = `fly-left ${duration}s linear infinite`;
+        star.style.animationDelay = `-${startOffset}s`; // Offsets each star's movement to look smooth
+
+        document.body.appendChild(star);
+    }
+</script>
+
+</body>
+</html>
