@@ -288,9 +288,9 @@ class Weapon1(Weapon):
                     upwards = math.sin(math.radians(round.angle))
                     right = math.cos(math.radians(round.angle))
 
-                    if isinstance(self.parent, Player):
-                        print(round.angle)
-                        print(upwards, right)
+                    # if isinstance(self.parent, Player):
+                    #     print(round.angle, upwards, right)
+                       
                     
                     round.rect.x += right * round.vel
                     round.rect.y += upwards * round.vel
@@ -411,7 +411,6 @@ class Weapon3(Weapon2):
 
             yield
 
-# TODO: fix closest_enemy logic
 # TODO: make compatible with enemies
 class Weapon4(Weapon2):
     def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
@@ -420,13 +419,16 @@ class Weapon4(Weapon2):
         self.closest_enemy: Ship = None
         self.prev_enemy_dist: float = 9999
 
-    def get_closest_enemy_angle(self, round: Round) -> float:
+    def get_closest_enemy_angle(self, round: Round) -> float | None:
+        if not self.closest_enemy: 
+            return self.shoot_angle
         adj = self.closest_enemy.rect.x + self.closest_enemy.width//2 - round.rect.x
         opp = self.closest_enemy.rect.y + self.closest_enemy.height//2 - round.rect.y
         hyp = math.sqrt(adj ** 2 + opp ** 2)
 
         if hyp != 0:
-            # print(math.degrees(math.acos(adj / hyp)))
+            if opp < 0: 
+                return -math.degrees(math.acos(adj / hyp))
             return math.degrees(math.acos(adj / hyp))
         return self.shoot_angle
     
@@ -437,17 +439,19 @@ class Weapon4(Weapon2):
         elif isinstance(self.parent, StandardEnemy):
             self.target_enemies = [self.currentLevel.player]
 
+        if self.closest_enemy is None:
+            self.closest_enemy: Ship = self.target_enemies[0]
+
         while True:
 
-            if self.closest_enemy is None:
-                self.closest_enemy: Ship = self.target_enemies[0]
-            
             for enemy in self.target_enemies:
-                if self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x:
+                if self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x or (isinstance(self.parent, StandardEnemy) and self.parent.rect.x - 20 > enemy.rect.x):
                     curr_enemy_dist = math.sqrt((self.parent.rect.x - enemy.rect.x)**2 + (self.parent.rect.y - enemy.rect.y)**2)
                     if curr_enemy_dist < self.prev_enemy_dist and self.closest_enemy.is_alive or not self.closest_enemy.is_alive:
                         self.closest_enemy = enemy
                         self.prev_enemy_dist = curr_enemy_dist
+                else:
+                    self.closest_enemy = None
                         
 
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
@@ -465,8 +469,7 @@ class Weapon4(Weapon2):
                     color=self.round_color
                 )
                 
-                round1.angle = -self.get_closest_enemy_angle(round1)
-                print(round1.angle)
+                round1.angle = self.get_closest_enemy_angle(round1)
 
                 round2 = Round(
                     self.currentLevel,
@@ -479,7 +482,7 @@ class Weapon4(Weapon2):
                     color=self.round_color
                 )
 
-                round2.angle = -self.get_closest_enemy_angle(round2)
+                round2.angle = round1.angle
             
                 self.rounds.append(round1)
                 self.rounds.append(round2)

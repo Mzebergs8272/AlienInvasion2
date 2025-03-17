@@ -78,7 +78,7 @@ player.weapon = weapon1
 level1.player = player
 
 big_enemy = StandardEnemy(level1, parent=level1, width=150, height=150, spawn_position=[1100, 250], sprite_collection_name="explosion2", random_shoot_cooldowns=[0.2], max_health=2000)
-big_enemy_weapon = Weapon3(level1, parent=big_enemy, round_sprite_collection_name="explosion1", max_shoot_cooldown=0, shoot_cooldown=0, round_vel=5, rotation_speed=10, damage=0.5, shoot_angle=180)
+big_enemy_weapon = Weapon4(level1, parent=big_enemy, round_sprite_collection_name="explosion1", max_shoot_cooldown=0, shoot_cooldown=0, round_vel=5, rotation_speed=10, damage=0.5, shoot_angle=180)
 big_enemy.weapon = big_enemy_weapon
 
 
