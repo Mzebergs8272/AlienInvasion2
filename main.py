@@ -1,4 +1,4 @@
-from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy
+from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost
 
 
 def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
@@ -64,9 +64,9 @@ player: Ship = Player(
     vel=10, 
     sprite_collection_name="explosion2",
     spawn_position=[150, game.screen_h//2],
-    max_health=10000
+    max_health=200
 )
-weapon1: Weapon = Weapon4(
+weapon1: Weapon = Weapon2(
     level1, 
     parent=player, 
     max_shoot_cooldown=0.2, 
@@ -77,16 +77,47 @@ weapon1: Weapon = Weapon4(
 player.weapon = weapon1
 level1.player = player
 
-big_enemy = StandardEnemy(level1, parent=level1, width=150, height=150, spawn_position=[1100, 250], sprite_collection_name="explosion2", random_shoot_cooldowns=[0.2], max_health=2000)
-big_enemy_weapon = Weapon4(level1, parent=big_enemy, round_sprite_collection_name="explosion1", max_shoot_cooldown=0, shoot_cooldown=0, round_vel=5, rotation_speed=10, damage=0.5, shoot_angle=180)
+big_enemy = StandardEnemy(
+    level1, 
+    parent=level1, 
+    width=150, 
+    height=150, 
+    spawn_position=[1100, 250], 
+    sprite_collection_name="explosion2", 
+    random_shoot_cooldowns=[1], 
+    max_health=2000
+)
+
+big_enemy_weapon = Weapon4(
+    level1, 
+    parent=big_enemy, 
+    round_sprite_collection_name="explosion1", 
+    max_shoot_cooldown=0, 
+    shoot_cooldown=0, 
+    round_vel=3, 
+    rotation_speed=10, 
+    damage=5, 
+    shoot_angle=180, 
+    round_size=[12, 12]
+)
+
 big_enemy.weapon = big_enemy_weapon
 
-
-
-level1.enemy_queue = [instantiate_fleet(level1, 7, 1250, -75, 100), 
+level1.enemy_queue = [instantiate_fleet(level1, 7, 1250, -75, 100) + instantiate_fleet(level1, 7, 1100, -75, 100), 
                       instantiate_fleet(level1, 7, 1250, -75, 100) + [big_enemy], 
                       ]
 
+# powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon4(level1, parent=None, round_sprite_collection_name="explosion1"), spawn_position=[500, -50])
+powerup2 = PowerupDamageBoost(level1, parent=level1, cooldown=5, spawn_position=[400, -50], duration=10)
+powerup3 = PowerupDamageBoost(level1, parent=level1, cooldown=6, spawn_position=[400, -50], duration=10)
+powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=7, spawn_position=[400, -50], duration=10)
+
+
+level1.powerup_queue = [#powerup1, 
+                        powerup2,
+                        powerup3,
+                        powerup4
+                        ]
 
 game.levels = [level1]
 game.start()

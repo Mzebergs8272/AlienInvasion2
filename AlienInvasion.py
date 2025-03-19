@@ -8,19 +8,38 @@ class Game:
         self.running: bool = True
         self.levels: list[Level] = []
         self.screen_w: int = kwargs.get("screen_w", 1400)
-        self.screen_h: int = kwargs.get("screen_h", 750)    
+        self.screen_h: int = kwargs.get("screen_h", 850)    
         self.screen: pg.Surface = pg.display.set_mode((self.screen_w, self.screen_h))
         self.fps: int = kwargs.get("fps", 60)
         self.clock: pg.time.Clock = pg.time.Clock()
 
         pg.display.set_caption("Alien Invasion 2")
 
-        # interface
-        self.interface_w: int = kwargs.get("interface_w", 100)
-        self.interface_health_bar_max_h = 300
+        self.currentLevel: Level = None
 
-        self.interface_health_bar: pg.Rect = pg.Rect(10, 10, 80, self.interface_health_bar_max_h)
-        self.interface_health_bar_background = pg.Rect(10, 10, 80, self.interface_health_bar_max_h)
+        # interface
+        self.interface_h: int = kwargs.get("interface_h", 100)
+
+        #powerup bars
+        self.powerup_grid: list[list[int, int]] = kwargs.get(
+            "powerup_grid", 
+            [
+                [350, self.screen_h - self.interface_h + 10],
+                [350, self.screen_h - self.interface_h + 45]
+    
+            ]
+        )
+        self.powerup_bars: list[pg.Rect] = []
+        self.active_powerups: list[Powerup]
+        
+        #health bar
+        self.interface_health_bar_max_w: int = 300
+        self.interface_health_bar: pg.Rect = pg.Rect(10, self.screen_h - self.interface_h + 10, self.interface_health_bar_max_w, 80)
+        self.interface_health_bar_background: pg.Rect = pg.Rect(10, self.screen_h - self.interface_h + 10, self.interface_health_bar_max_w, 80)
+        self.interface_health_bar_color: tuple[int,int,int] = kwargs.get("interface_health_bar_color", None)
+        self.powerup_bar_max_w = 100
+
+
 
     def check_events(self) -> None:
         for event in pg.event.get():
@@ -31,6 +50,7 @@ class Game:
     def start(self) -> None:
         pg.init()
         for level in self.levels:
+            self.currentLevel = level
             while self.running:
                 self.check_events()
                 # between-level graphics here
@@ -44,19 +64,42 @@ class Game:
     def draw_player_health(self, health, max_health):
         while health > 0:
             pg.draw.rect(self.screen, (0, 0, 0), self.interface_health_bar_background)
-            hls = colorsys.hls_to_rgb((self.interface_health_bar.height / self.interface_health_bar_max_h * 100)/360, 0.5, 1)
+            hls = colorsys.hls_to_rgb((self.interface_health_bar.width / self.interface_health_bar_max_w * 100)/360, 0.5, 1)
+            
+            prev_height = self.interface_health_bar.width + 4
 
-            while self.interface_health_bar.height > health / max_health * self.interface_health_bar_max_h:
-                self.interface_health_bar.height -= 2
-                break
+            if self.interface_health_bar.width > health / max_health * self.interface_health_bar_max_w:
+                self.interface_health_bar.width -= 2
+                
+            if self.interface_health_bar.width < health / max_health * self.interface_health_bar_max_w:
+                self.interface_health_bar.width += 6
+
+            if prev_height == self.interface_health_bar.width:
+                self.interface_health_bar.width = health / max_health * self.interface_health_bar_max_w
            
-            pg.draw.rect(self.screen, list((i*255 for i in hls)), self.interface_health_bar)
+            pg.draw.rect(self.screen, self.interface_health_bar_color or list((i*255 for i in hls)), self.interface_health_bar)
 
             yield
         yield
+    
+    def draw_active_powerups(self):
+    
+        for idx, powerup in enumerate(self.currentLevel.powerups):
+            if powerup.active and not powerup.finished:
+                
+                # round() rounds to nearest even integer
+                column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
+                row = int(not idx % 2 == 0)
+                
+                # first bar's x position + bar's width * by column + a right-margin of 25
+                barx = self.powerup_grid[row][0] + self.powerup_bar_max_w * column + ((column - 1) * 25)
+                bary = self.powerup_grid[row][1]
+
+                pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, 25))
+                pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / powerup.max_duration * self.powerup_bar_max_w, 25))
 
     def draw_interface(self):
-        pg.draw.rect(self.screen, (50, 50, 50), (0, 0, self.interface_w, self.screen_h))
+        pg.draw.rect(self.screen, (50, 50, 50), (0, self.screen_h - self.interface_h, self.screen_w, self.interface_h))
             
 
                 
@@ -76,11 +119,9 @@ class Level:
         
         self.bg_vid_url: str = "space_background_1.mp4"
         self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
-        self.bg_vid.set(3, 10)
-        self.bg_vid.set(4,10)
-        self.bg_vid_fps = self.bg_vid.get(cv2.CAP_PROP_FPS)
 
-        # pg.mouse.set_visible(False)
+        self.powerup_queue: list[Powerup] = kwargs.get("powerup_queue", [])
+        self.powerups: list[Powerup] = kwargs.get("powerups", [])
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
@@ -100,31 +141,50 @@ class Level:
                 pg.event.set_grab(True)
             
     def is_rect_onscreen(self, rect: pg.Rect) -> bool:
-        if self.parent.interface_w < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - rect.height:
+        if 0 < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - self.parent.interface_h - rect.height:
             return True
         return False
     
     def handle_enemies(self) -> None:
         if not self.enemies and self.enemy_queue:
-            self.enemies = self.enemy_queue.pop()
+            self.enemies = self.enemy_queue.pop(0)
+
+    def handle_powerups(self) -> None:
+        for powerup in self.powerup_queue:
+            powerup.cooldown -= self.dt
+            if powerup.cooldown <= 0:
+                self.powerups.append(powerup)
+                self.powerup_queue.remove(powerup)
 
     def start(self) -> None:
         while self.running:
             self.keys = pg.key.get_pressed()
             self.check_events()
 
-            self.parent.screen.fill("black")
+            # order of rendering: background > powerups > enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
 
-            success, bg_vid_image = self.bg_vid.read()
+            vid_read_success, bg_vid_image = self.bg_vid.read()
 
-            if success:
+            if vid_read_success:
                 resize = cv2.resize(bg_vid_image, (self.parent.screen_w, self.parent.screen_h)) 
                 bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
             else:
                 self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
             self.parent.screen.blit(bg_vid_surface, (0, 0))
 
-            # order of rendering: enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
+            self.handle_powerups()
+            for powerup in self.powerups:
+
+                if powerup.rect:
+                    powerup.draw()
+                    powerup.update_position()
+                    powerup.handle_collision()
+                
+                if powerup.active:
+                    powerup.effect()
+                    
+                if powerup.finished:
+                    self.powerups.remove(powerup)
             
             for enemy in self.enemies: 
                 if enemy.is_alive:
@@ -154,11 +214,11 @@ class Level:
                     enemy.handle_bullet_collision()
                 else:
                     next(enemy.death_animation())
-
+        
             self.parent.draw_interface()
             next(self.parent.draw_player_health(self.player.health, self.player.max_health))
+            self.parent.draw_active_powerups()
             
-
             pg.display.update()
             self.dt = self.clock.tick(self.parent.fps) / 1000
 
@@ -240,8 +300,6 @@ class Weapon(metaclass=ABCMeta):
 
         self.shoot_angle: float = kwargs.get("shoot_angle", 0)
 
-        
-
     @abstractmethod
     def shoot(self, round_spawn_position: list[int, int]):
         pass
@@ -288,10 +346,6 @@ class Weapon1(Weapon):
                     upwards = math.sin(math.radians(round.angle))
                     right = math.cos(math.radians(round.angle))
 
-                    # if isinstance(self.parent, Player):
-                    #     print(round.angle, upwards, right)
-                       
-                    
                     round.rect.x += right * round.vel
                     round.rect.y += upwards * round.vel
                 else:
@@ -411,7 +465,8 @@ class Weapon3(Weapon2):
 
             yield
 
-# TODO: make compatible with enemies
+
+
 class Weapon4(Weapon2):
     def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
@@ -443,21 +498,18 @@ class Weapon4(Weapon2):
             self.closest_enemy: Ship = self.target_enemies[0]
 
         while True:
-
             for enemy in self.target_enemies:
-                if self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x or (isinstance(self.parent, StandardEnemy) and self.parent.rect.x - 20 > enemy.rect.x):
+                if enemy.rect and self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x or (isinstance(self.parent, StandardEnemy) and self.parent.rect.x - 20 > enemy.rect.x):
                     curr_enemy_dist = math.sqrt((self.parent.rect.x - enemy.rect.x)**2 + (self.parent.rect.y - enemy.rect.y)**2)
                     if curr_enemy_dist < self.prev_enemy_dist and self.closest_enemy.is_alive or not self.closest_enemy.is_alive:
                         self.closest_enemy = enemy
                         self.prev_enemy_dist = curr_enemy_dist
+                
                 else:
                     self.closest_enemy = None
                         
-
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
             if self.shoot_cooldown <= 0:
-
-               
 
                 round1 = Round(
                     self.currentLevel, 
@@ -490,6 +542,8 @@ class Weapon4(Weapon2):
 
             yield
 
+
+
 class Ship(metaclass=ABCMeta):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         self.parent: Level = parent
@@ -504,6 +558,7 @@ class Ship(metaclass=ABCMeta):
         #health
         self.max_health: float = kwargs.get("max_health", 100)
         self.health: float = self.max_health
+        self.immune: bool = kwargs.get("immune", False)
 
         # hit indication
         self.max_hit_indication_duration: float = kwargs.get("max_hit_indication_duration", 0.1)
@@ -545,11 +600,15 @@ class Ship(metaclass=ABCMeta):
     def handle_health(self):
         pass
 
-    def take_damage(self, amount: float):
-        self.health -= amount
+    def take_health(self, amount: float):
+        if not self.immune:
+            self.health -= amount
         
         if self.health > 0:
             self.hit_indication_duration = self.max_hit_indication_duration
+    
+    def give_health(self, amount: float):
+        self.health = min(self.health + amount, self.max_health)
     
     def hit_indication_anim(self):
         while self.hit_indication_duration:
@@ -596,7 +655,7 @@ class Player(Ship):
         for round in self.weapon.rounds:
             for enemy in self.parent.enemies:
                 if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
-                    enemy.take_damage(self.weapon.damage)
+                    enemy.take_health(self.weapon.damage)
                     round.is_alive = False
                     enemy.handle_health()
         
@@ -706,8 +765,137 @@ class StandardEnemy(Ship):
         player = self.parent.player
         for round in self.weapon.rounds:
             if player.is_alive and round.is_alive and round.rect.colliderect(player.rect):
-                player.take_damage(self.weapon.damage)
+                player.take_health(self.weapon.damage)
                 round.is_alive = False
                 player.handle_health()
 
 
+# TODO: make enemies be able to pick up powerups
+class Powerup:
+    def __init__(self, currentLevel: Level, parent: Level, **kwargs):
+        self.currentLevel = currentLevel
+        self.parent = parent
+        self.width: int = kwargs.get("width", 30)
+        self.height: int = kwargs.get("height", 30)
+        self.spawn_position: list[int, int] = kwargs.get("spawn_position", [100, 100])
+
+        self.vel: float = kwargs.get("vel", 3)
+
+        self.cooldown: float = kwargs.get("cooldown", 2)
+        self.duration: float = kwargs.get("duration", 1)
+        self.max_duration: float = self.duration
+        self.active: bool = kwargs.get("active", False)
+        self.finished: bool = False
+
+        # powerup sprite
+        self.angle: float = kwargs.get("angle", 0)
+        self.image_path: str = kwargs.get("image_path", "images/ui/icon-powerup.png")
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
+        self.rect: pg.Rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
+
+    def draw(self):
+        self.currentLevel.parent.screen.blit(self.image, self.rect)
+
+    def update_position(self):
+        self.rect.y += self.vel
+
+    @abstractmethod
+    def handle_collision(self):
+        pass
+
+    @abstractmethod
+    def effect(self):
+        pass
+
+
+
+class PowerupWeapon(Powerup):
+    def __init__(self, currentLevel: Level, parent: Level, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.weapon: Weapon = kwargs.get("weapon", Weapon1(currentLevel, parent=None))
+
+    def handle_collision(self):
+        if self.rect.colliderect(self.currentLevel.player.rect):
+            self.active = True
+    
+    def effect(self):
+        self.currentLevel.player.weapon = self.weapon
+        self.weapon.parent = self.currentLevel.player
+        self.finished = True 
+
+
+
+class PowerupHealth(Powerup):
+    def __init__(self, currentLevel: Level, parent: Level, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.health_value: float = kwargs.get("health_value", 50)
+
+        self.image_path: str = kwargs.get("image_path", "images/ui/icon-health.png")
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
+
+    def handle_collision(self):
+        if self.rect.colliderect(self.currentLevel.player.rect):
+            self.active = True
+            
+    def effect(self):
+        self.currentLevel.player.give_health(self.health_value)
+        self.finished = True
+    
+
+
+class PowerupShield(Powerup):
+    def __init__(self, currentLevel: Level, parent: Level, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+    def handle_collision(self):
+        if self.rect.colliderect(self.currentLevel.player.rect):
+            self.active = True
+            self.rect = None
+    
+    def effect(self):
+        self.duration -= self.currentLevel.dt
+
+        if not self.currentLevel.player.immune and not self.currentLevel.parent.interface_health_bar_color:
+            self.currentLevel.player.immune = True
+            self.currentLevel.parent.interface_health_bar_color = (0, 150, 255)
+
+        if self.duration <= 0:
+            self.currentLevel.player.immune = False
+            self.currentLevel.parent.interface_health_bar_color = None
+            self.finished = True
+
+
+
+class PowerupDamageBoost(Powerup):
+    def __init__(self, currentLevel: Level, parent: Ship=None, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.new_damage_value: float = kwargs.get("new_damage_value", 20)
+
+        self.prev_weapon_damage: float = None
+        self.prev_round_color: tuple[int,int,int] = None
+
+    def handle_collision(self):
+        if self.rect.colliderect(self.currentLevel.player.rect):
+            self.active = True
+            self.rect = None
+    
+    def effect(self):
+        self.duration -= self.currentLevel.dt
+
+        if not self.prev_weapon_damage:
+            self.prev_weapon_damage = self.currentLevel.player.weapon.damage
+        
+        if not self.prev_round_color:
+            self.prev_round_color = self.currentLevel.player.weapon.round_color
+
+        if self.currentLevel.player.weapon.damage == self.prev_weapon_damage:
+            self.currentLevel.player.weapon.damage = self.new_damage_value
+            self.currentLevel.player.weapon.round_color = (255, 255, 0)
+
+        if self.duration <= 0:
+            self.currentLevel.player.weapon.damage = self.prev_weapon_damage
+            self.currentLevel.player.weapon.round_color = self.prev_round_color
+            self.finished = True
