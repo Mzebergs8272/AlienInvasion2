@@ -3,6 +3,8 @@ import pygame as pg, sys, math, os, random, colorsys, cv2, types
 from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet sprites
+# TODO: change ship explosion sprite animation
+# TODO: add sprite animation to meteorite
 
 class Game:
     def __init__(self, **kwargs):
@@ -83,18 +85,18 @@ class Game:
     
     def draw_active_powerups(self):
         for idx, powerup in enumerate(self.currentLevel.active_powerups):
-        
-            # round() rounds to nearest even integer
-            column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
-            row = int(not idx % 2 == 0)
-          
-            # first bar's x position + bar's width * by column + a right-margin of 35
-            barx = self.powerup_grid_position[0] + (self.powerup_bar_max_w * column) + ((column - 1) * self.powerup_bar_h + 10)
-            bary = self.powerup_grid_position[1] + (row * self.powerup_bar_h) + (row * 10)
+            if not powerup.finished:
+                # round() rounds to nearest even integer
+                column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
+                row = int(not idx % 2 == 0)
+            
+                # first bar's x position + bar's width * by column + a right-margin of 35
+                barx = self.powerup_grid_position[0] + (self.powerup_bar_max_w * column) + ((column - 1) * self.powerup_bar_h + 10)
+                bary = self.powerup_grid_position[1] + (row * self.powerup_bar_h) + (row * 10)
 
-            self.screen.blit(self.powerup_icons[type(powerup)], self.powerup_icons[type(powerup)].get_rect(top=bary, left=barx - self.powerup_bar_h - 5))
-            pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, self.powerup_bar_h))
-            pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / (powerup.max_duration) * self.powerup_bar_max_w, self.powerup_bar_h))
+                self.screen.blit(self.powerup_icons[type(powerup)], self.powerup_icons[type(powerup)].get_rect(top=bary, left=barx - self.powerup_bar_h - 5))
+                pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, self.powerup_bar_h))
+                pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / (powerup.max_duration) * self.powerup_bar_max_w, self.powerup_bar_h))
             
 
     def draw_interface(self):
@@ -110,6 +112,8 @@ class Level:
         self.player: Player = None
         self.enemy_queue: list[list[StandardEnemy]] = kwargs.get("enemy_queue", [])
         self.enemies: list[StandardEnemy] = kwargs.get("enemies", [])
+
+        self.meteorites: list[Meteorite] = kwargs.get("meteorites", [])
 
         self.clock = pg.time.Clock()
         self.dt = 0
@@ -206,7 +210,17 @@ class Level:
                     
                 if powerup.finished:
                     self.powerups.remove(powerup)
-            
+
+            for meteorite in self.meteorites:
+                if meteorite.is_alive:
+                    meteorite.draw()
+                    meteorite.update_position()
+                    meteorite.handle_collision()
+                elif not meteorite.rect:
+                    self.meteorites.remove(meteorite)
+                else:
+                    next(meteorite.death_animation())
+                    
             for enemy in self.enemies: 
                 if enemy.is_alive:
                     enemy.update_position()
@@ -640,11 +654,18 @@ class Ship(metaclass=ABCMeta):
         yield
 
     def death_animation(self):
-        if not isinstance(self.sprite_collection[0], pg.Surface): self.sprite_collection = self.currentLevel.sprite_collections["explosion2"]
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
             while self.sprite_frame_duration > 0:
                 self.currentLevel.parent.screen.blit(
-                    pg.transform.scale(self.sprite_collection[self.sprite_frame_index], self.sprite_size), (self.rect.x + ((self.rect.width - self.sprite_size[0])//2), self.rect.y + ((self.rect.height - self.sprite_size[1])//2)))
+                    pg.transform.scale(
+                        self.sprite_collection[self.sprite_frame_index], 
+                        self.sprite_size
+                    ), 
+                    (
+                        self.rect.x + ((self.rect.width - self.sprite_size[0])//2), 
+                        self.rect.y + ((self.rect.height - self.sprite_size[1])//2)
+                    )
+                )
 
                 self.death_anim_duration -= self.currentLevel.dt
                 self.sprite_frame_duration -= self.currentLevel.dt
@@ -674,7 +695,7 @@ class Player(Ship):
 
     def handle_bullet_collision(self) -> None:
         for round in self.weapon.rounds:
-            for enemy in self.parent.enemies:
+            for enemy in self.currentLevel.enemies + self.currentLevel.meteorites:
                 if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
                     enemy.take_health(self.weapon.damage)
                     round.is_alive = False
@@ -783,12 +804,13 @@ class StandardEnemy(Ship):
             self.rect = None
 
     def handle_bullet_collision(self) -> None:
-        player = self.parent.player
-        for round in self.weapon.rounds:
-            if player.is_alive and round.is_alive and round.rect.colliderect(player.rect):
-                player.take_health(self.weapon.damage)
-                round.is_alive = False
-                player.handle_health()
+
+        for enemy in [self.currentLevel.player] + self.currentLevel.meteorites:
+            for round in self.weapon.rounds:
+                if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
+                    enemy.take_health(self.weapon.damage)
+                    round.is_alive = False
+                    enemy.handle_health()
 
 
 # TODO: make powerups compatible with enemies
@@ -920,3 +942,42 @@ class PowerupDamageBoost(Powerup):
             self.currentLevel.player.weapon.damage = self.prev_weapon_damage
             self.currentLevel.player.weapon.round_color = self.prev_round_color
             self.finished = True
+
+
+
+class Meteorite(Ship):
+    def __init__(self, currentLevel: Level, parent: Level, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+        
+        self.vel: float = kwargs.get("vel", 2)
+
+        self.image_path = kwargs.get("image_path", "images/meteorite.png")
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
+        self.rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
+
+        self.damage: float = kwargs.get("damage", 50)
+    
+    def shoot(self):
+        return
+    
+    # TODO: when meteorite goes off screen, reset to random position, angle, vel, health, damage and size
+    def update_position(self):
+        self.rect.x += math.cos(math.radians(self.angle)) * self.vel
+        self.rect.y += -math.sin(math.radians(self.angle)) * self.vel
+    
+    def handle_health(self):
+        if self.health <= 0:
+            self.is_alive = False
+        
+        if self.death_anim_duration <= 0:
+            self.rect = None
+
+    def draw(self):
+        self.currentLevel.parent.screen.blit(self.image, self.rect)
+
+    def handle_collision(self):
+        if self.rect.colliderect(self.currentLevel.player.rect):
+            self.currentLevel.player.take_health(self.damage)
+            self.is_alive = False
+    
+        

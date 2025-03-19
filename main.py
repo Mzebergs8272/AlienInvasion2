@@ -1,4 +1,4 @@
-from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost
+from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost, Meteorite
 
 
 def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
@@ -9,7 +9,7 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
             currentLevel, 
             parent=currentLevel, 
             spawn_position=[left, top + (spacing * i)], 
-            sprite_collection_name="explosion2", 
+            sprite_collection_name="explosion3", 
             width=kwargs.get("width", 100),
             height=kwargs.get("height", 75),
             random_shoot_cooldowns=kwargs.get("random_shoot_cooldowns", [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3]),
@@ -45,17 +45,28 @@ game: Game = Game(powerup_icons=powerup_icons)
 sprite_collections = {
     "explosion1": 
     [
-        "images/explosions/explosion1_1.png",
-        "images/explosions/explosion1_2.png",
-        "images/explosions/explosion1_3.png",
-        "images/explosions/explosion1_4.png"
+        "images/explosions/explosion1/explosion001.png",
+        "images/explosions/explosion1/explosion002.png",
+        "images/explosions/explosion1/explosion003.png",
+        "images/explosions/explosion1/explosion004.png",
+        "images/explosions/explosion1/explosion005.png",
+        "images/explosions/explosion1/explosion006.png",
+        "images/explosions/explosion1/explosion007.png",
+        "images/explosions/explosion1/explosion008.png",
     ],
     "explosion2": 
     [
-        "images/explosions/explosion2_1.png",
-        "images/explosions/explosion2_2.png",
-        "images/explosions/explosion2_3.png",
-        "images/explosions/explosion2_4.png"
+        "images/explosions/explosion2/explosion001.png",
+        "images/explosions/explosion2/explosion002.png",
+        "images/explosions/explosion2/explosion003.png",
+        "images/explosions/explosion2/explosion004.png"
+    ],
+    "explosion3":
+    [
+        "images/explosions/explosion3/explosion001.png",
+        "images/explosions/explosion3/explosion002.png",
+        "images/explosions/explosion3/explosion003.png",
+        "images/explosions/explosion3/explosion004.png"
     ]
 }
 
@@ -68,7 +79,7 @@ player: Ship = Player(
     level1, 
     parent=level1,
     vel=10, 
-    sprite_collection_name="explosion2",
+    sprite_collection_name="explosion3",
     spawn_position=[150, game.screen_h//2],
     max_health=200
 )
@@ -89,7 +100,7 @@ big_enemy = StandardEnemy(
     width=150, 
     height=150, 
     spawn_position=[1100, 250], 
-    sprite_collection_name="explosion2", 
+    sprite_collection_name="explosion3",
     random_shoot_cooldowns=[1], 
     max_health=2000
 )
@@ -121,13 +132,20 @@ powerup5 = PowerupShield(level1, parent=level1, cooldown=8, spawn_position=[400,
 powerup6 = PowerupShield(level1, parent=level1, cooldown=9, spawn_position=[400, -50], duration=10, new_damage_value=50)
 
 
-level1.powerup_queue = [#powerup1, 
-                        powerup2,
-                        powerup3,
-                        powerup4,
-                        powerup5,
-                        powerup6
-                        ]
+level1.powerup_queue = [
+    #powerup1, 
+    powerup2,
+    powerup3,
+    powerup4,
+    powerup5,
+    powerup6
+]
+
+meteorite1 = Meteorite(level1, parent=level1, sprite_collection_name="explosion3", angle=140, spawn_position=[900, game.screen_h])
+
+level1.meteorites = [
+    meteorite1
+]
 
 game.levels = [level1]
 game.start()
