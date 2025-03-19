@@ -107,16 +107,20 @@ level1.enemy_queue = [instantiate_fleet(level1, 7, 1250, -75, 100) + instantiate
                       instantiate_fleet(level1, 7, 1250, -75, 100) + [big_enemy], 
                       ]
 
-# powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon4(level1, parent=None, round_sprite_collection_name="explosion1"), spawn_position=[500, -50])
+powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon4(level1, parent=None, round_sprite_collection_name="explosion1"), spawn_position=[500, -50])
 powerup2 = PowerupDamageBoost(level1, parent=level1, cooldown=5, spawn_position=[400, -50], duration=10)
 powerup3 = PowerupDamageBoost(level1, parent=level1, cooldown=6, spawn_position=[400, -50], duration=10)
-powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=7, spawn_position=[400, -50], duration=10)
+powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=7, spawn_position=[400, -50], duration=10, new_damage_value=50)
+powerup5 = PowerupShield(level1, parent=level1, cooldown=8, spawn_position=[400, -50], duration=10, new_damage_value=50)
+powerup6 = PowerupShield(level1, parent=level1, cooldown=9, spawn_position=[400, -50], duration=10, new_damage_value=50)
 
 
 level1.powerup_queue = [#powerup1, 
                         powerup2,
                         powerup3,
-                        powerup4
+                        powerup4,
+                        powerup5,
+                        powerup6
                         ]
 
 game.levels = [level1]

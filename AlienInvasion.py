@@ -1,4 +1,5 @@
-import pygame as pg, sys, math, os, random, colorsys, cv2
+import pygame as pg, sys, math, os, random, colorsys, cv2, types
+
 from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet animations
@@ -29,8 +30,9 @@ class Game:
     
             ]
         )
-        self.powerup_bars: list[pg.Rect] = []
-        self.active_powerups: list[Powerup]
+        self.active_powerups: list[Powerup] = []
+
+        self.powerup_icons: dict[Powerup, str | pg.Surface] = kwargs.get("powerup_icons", {})
         
         #health bar
         self.interface_health_bar_max_w: int = 300
@@ -39,13 +41,16 @@ class Game:
         self.interface_health_bar_color: tuple[int,int,int] = kwargs.get("interface_health_bar_color", None)
         self.powerup_bar_max_w = 100
 
-
-
     def check_events(self) -> None:
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 pg.quit()
                 sys.exit()
+
+    def load_ui_images(self):
+        for type, icon in self.powerup_icons:
+            pass
+
 
     def start(self) -> None:
         pg.init()
@@ -83,10 +88,26 @@ class Game:
         yield
     
     def draw_active_powerups(self):
+        # storing new active powerups locally in self.active_powerups 
+        for powerup in self.currentLevel.powerups:
+            if powerup.active and not powerup.finished and powerup not in self.active_powerups:
+                self.active_powerups.append(powerup)
+        
+        # finds any stackable powerups and combines their durations into powerup1
+        # TODO: make powerup2 override powerup's attributes and effect() method 
+        for idx, powerup1 in enumerate(self.active_powerups):
+            for powerup2 in self.active_powerups:
+                if powerup1 != powerup2:
+                    if type(powerup1) == type(powerup2):
+                                                
+                        powerup1.duration += powerup2.duration
+                        powerup1.max_duration = powerup1.duration
+                    
+                        self.active_powerups.remove(powerup2)
+                        self.currentLevel.powerups.remove(powerup2)
+            
+            if powerup1.active and not powerup1.finished:
     
-        for idx, powerup in enumerate(self.currentLevel.powerups):
-            if powerup.active and not powerup.finished:
-                
                 # round() rounds to nearest even integer
                 column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
                 row = int(not idx % 2 == 0)
@@ -96,7 +117,9 @@ class Game:
                 bary = self.powerup_grid[row][1]
 
                 pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, 25))
-                pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / powerup.max_duration * self.powerup_bar_max_w, 25))
+                pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup1.duration / (powerup1.max_duration) * self.powerup_bar_max_w, 25))
+            else:
+                self.active_powerups.remove(powerup1)
 
     def draw_interface(self):
         pg.draw.rect(self.screen, (50, 50, 50), (0, self.screen_h - self.interface_h, self.screen_w, self.interface_h))
@@ -125,6 +148,7 @@ class Level:
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
+
                                                                 
         self.load_sprites()
 
