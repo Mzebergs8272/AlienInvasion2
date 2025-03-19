@@ -16,7 +16,6 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
             move_in_vel=10,
             angle=0,
     
-
         )
 
         if kwargs.get("weapon"):
@@ -36,7 +35,12 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
         
     return fleet
 
-game: Game = Game()
+powerup_icons = {
+    PowerupDamageBoost: "images/ui/icon-powerup.png",
+    PowerupShield: "images/ui/icon-powerup.png",
+}
+
+game: Game = Game(powerup_icons=powerup_icons)
 
 sprite_collections = {
     "explosion1": 
@@ -54,6 +58,8 @@ sprite_collections = {
         "images/explosions/explosion2_4.png"
     ]
 }
+
+
 
 level1: Level = Level(parent=game, sprite_collections=sprite_collections)
 

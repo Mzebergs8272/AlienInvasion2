@@ -2,7 +2,7 @@ import pygame as pg, sys, math, os, random, colorsys, cv2, types
 
 from abc import abstractmethod, ABCMeta
 
-# TODO: create bullet animations
+# TODO: create bullet sprites
 
 class Game:
     def __init__(self, **kwargs):
@@ -22,16 +22,8 @@ class Game:
         self.interface_h: int = kwargs.get("interface_h", 100)
 
         #powerup bars
-        self.powerup_grid: list[list[int, int]] = kwargs.get(
-            "powerup_grid", 
-            [
-                [350, self.screen_h - self.interface_h + 10],
-                [350, self.screen_h - self.interface_h + 45]
-    
-            ]
-        )
-        self.active_powerups: list[Powerup] = []
-
+        self.powerup_grid_position: tuple[int, int] = kwargs.get("powerup_grid_position", (350, self.screen_h - self.interface_h + 10))
+       
         self.powerup_icons: dict[Powerup, str | pg.Surface] = kwargs.get("powerup_icons", {})
         
         #health bar
@@ -39,7 +31,10 @@ class Game:
         self.interface_health_bar: pg.Rect = pg.Rect(10, self.screen_h - self.interface_h + 10, self.interface_health_bar_max_w, 80)
         self.interface_health_bar_background: pg.Rect = pg.Rect(10, self.screen_h - self.interface_h + 10, self.interface_health_bar_max_w, 80)
         self.interface_health_bar_color: tuple[int,int,int] = kwargs.get("interface_health_bar_color", None)
-        self.powerup_bar_max_w = 100
+        self.powerup_bar_max_w: int = kwargs.get("powerup_bar_max_w", 100)
+        self.powerup_bar_h: int = kwargs.get("powerup_bar_h", 25)
+
+        self.load_ui_images()
 
     def check_events(self) -> None:
         for event in pg.event.get():
@@ -48,9 +43,8 @@ class Game:
                 sys.exit()
 
     def load_ui_images(self):
-        for type, icon in self.powerup_icons:
-            pass
-
+        for type, path in self.powerup_icons.items():
+            self.powerup_icons[type] = pg.transform.scale(pg.image.load(path), (self.powerup_bar_h, self.powerup_bar_h))
 
     def start(self) -> None:
         pg.init()
@@ -88,38 +82,20 @@ class Game:
         yield
     
     def draw_active_powerups(self):
-        # storing new active powerups locally in self.active_powerups 
-        for powerup in self.currentLevel.powerups:
-            if powerup.active and not powerup.finished and powerup not in self.active_powerups:
-                self.active_powerups.append(powerup)
+        for idx, powerup in enumerate(self.currentLevel.active_powerups):
         
-        # finds any stackable powerups and combines their durations into powerup1
-        # TODO: make powerup2 override powerup's attributes and effect() method 
-        for idx, powerup1 in enumerate(self.active_powerups):
-            for powerup2 in self.active_powerups:
-                if powerup1 != powerup2:
-                    if type(powerup1) == type(powerup2):
-                                                
-                        powerup1.duration += powerup2.duration
-                        powerup1.max_duration = powerup1.duration
-                    
-                        self.active_powerups.remove(powerup2)
-                        self.currentLevel.powerups.remove(powerup2)
-            
-            if powerup1.active and not powerup1.finished:
-    
-                # round() rounds to nearest even integer
-                column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
-                row = int(not idx % 2 == 0)
-                
-                # first bar's x position + bar's width * by column + a right-margin of 25
-                barx = self.powerup_grid[row][0] + self.powerup_bar_max_w * column + ((column - 1) * 25)
-                bary = self.powerup_grid[row][1]
+            # round() rounds to nearest even integer
+            column = round((idx + 1) / 2) + 1 if idx == 0 else round((idx + 1) / 2)
+            row = int(not idx % 2 == 0)
+          
+            # first bar's x position + bar's width * by column + a right-margin of 35
+            barx = self.powerup_grid_position[0] + (self.powerup_bar_max_w * column) + ((column - 1) * self.powerup_bar_h + 10)
+            bary = self.powerup_grid_position[1] + (row * self.powerup_bar_h) + (row * 10)
 
-                pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, 25))
-                pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup1.duration / (powerup1.max_duration) * self.powerup_bar_max_w, 25))
-            else:
-                self.active_powerups.remove(powerup1)
+            self.screen.blit(self.powerup_icons[type(powerup)], self.powerup_icons[type(powerup)].get_rect(top=bary, left=barx - self.powerup_bar_h - 5))
+            pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, self.powerup_bar_h))
+            pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / (powerup.max_duration) * self.powerup_bar_max_w, self.powerup_bar_h))
+            
 
     def draw_interface(self):
         pg.draw.rect(self.screen, (50, 50, 50), (0, self.screen_h - self.interface_h, self.screen_w, self.interface_h))
@@ -145,11 +121,11 @@ class Level:
 
         self.powerup_queue: list[Powerup] = kwargs.get("powerup_queue", [])
         self.powerups: list[Powerup] = kwargs.get("powerups", [])
+        self.active_powerups: list[Powerup] = []
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
-
-                                                                
+                                      
         self.load_sprites()
 
     def load_sprites(self):
@@ -174,11 +150,32 @@ class Level:
             self.enemies = self.enemy_queue.pop(0)
 
     def handle_powerups(self) -> None:
+        # storing new active powerups locally in self.active_powerups 
         for powerup in self.powerup_queue:
-            powerup.cooldown -= self.dt
+            if powerup.cooldown > 0: powerup.cooldown -= self.dt
             if powerup.cooldown <= 0:
                 self.powerups.append(powerup)
                 self.powerup_queue.remove(powerup)
+
+        for powerup in self.powerups:
+            
+            if powerup.active and not powerup.finished and powerup not in self.active_powerups:
+                self.active_powerups.append(powerup)
+            
+            if powerup.finished:
+                self.active_powerups.remove(powerup)
+        
+        # finds any stackable powerups and combines their durations into powerup1
+        for powerup1 in self.active_powerups:
+            for powerup2 in self.active_powerups:
+                if powerup1 != powerup2:
+                    if type(powerup1) == type(powerup2):
+                                                
+                        powerup1.duration += powerup2.duration
+                        powerup1.max_duration = powerup1.duration
+                    
+                        self.active_powerups.remove(powerup2)
+                        self.powerups.remove(powerup2)
 
     def start(self) -> None:
         while self.running:
@@ -794,7 +791,7 @@ class StandardEnemy(Ship):
                 player.handle_health()
 
 
-# TODO: make enemies be able to pick up powerups
+# TODO: make powerups compatible with enemies
 class Powerup:
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         self.currentLevel = currentLevel
