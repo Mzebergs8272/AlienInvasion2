@@ -114,6 +114,13 @@ class Level:
         self.enemies: list[StandardEnemy] = kwargs.get("enemies", [])
 
         self.meteorites: list[Meteorite] = kwargs.get("meteorites", [])
+        self.meteorite_spawn_x_position_range: list[int, int] = kwargs.get("meteorite_spawn_x_position_range", [])
+        # self.meteorite_angle_range: list[int, int] = kwargs.get("meteorite_angle_range", [])
+        self.meteorite_health_range: list[float, float] = kwargs.get("meteorite_health_range", [])
+        self.meteorite_vel_range: list[float, float] = kwargs.get("meteorite_vel_range", [])
+        self.meteorite_size_range: list[int, int] = kwargs.get("meteorite_size_range", [])
+        self.meteorite_damage_range: list[float, float] = kwargs.get("meteorite_damage_range", [])
+        self.meteorite_cooldown_range: list[float, float] = kwargs.get("meteorite_cooldown_range", [])
 
         self.clock = pg.time.Clock()
         self.dt = 0
@@ -171,15 +178,20 @@ class Level:
         
         # finds any stackable powerups and combines their durations into powerup1
         for powerup1 in self.active_powerups:
-            for powerup2 in self.active_powerups:
-                if powerup1 != powerup2:
-                    if type(powerup1) == type(powerup2):
-                                                
-                        powerup1.duration += powerup2.duration
-                        powerup1.max_duration = powerup1.duration
-                    
-                        self.active_powerups.remove(powerup2)
-                        self.powerups.remove(powerup2)
+            if not powerup1.finished:
+                for powerup2 in self.active_powerups:
+                    if powerup1 != powerup2:
+                        if type(powerup1) == type(powerup2):
+                                                    
+                            powerup1.duration += powerup2.duration
+                            powerup1.max_duration = powerup1.duration
+                        
+                            self.active_powerups.remove(powerup2)
+                            self.powerups.remove(powerup2)
+            else:
+                self.active_powerups.remove(powerup1)
+            
+      
 
     def start(self) -> None:
         while self.running:
@@ -199,28 +211,27 @@ class Level:
 
             self.handle_powerups()
             for powerup in self.powerups:
-
                 if powerup.rect:
                     powerup.draw()
                     powerup.update_position()
                     powerup.handle_collision()
-                
+
                 if powerup.active:
                     powerup.effect()
                     
                 if powerup.finished:
                     self.powerups.remove(powerup)
 
+           
+
             for meteorite in self.meteorites:
-                if meteorite.is_alive:
-                    meteorite.draw()
+                if meteorite.is_alive or not meteorite.rect:
                     meteorite.update_position()
+                    meteorite.draw()
                     meteorite.handle_collision()
-                elif not meteorite.rect:
-                    self.meteorites.remove(meteorite)
                 else:
                     next(meteorite.death_animation())
-                    
+                
             for enemy in self.enemies: 
                 if enemy.is_alive:
                     enemy.update_position()
@@ -534,12 +545,11 @@ class Weapon4(Weapon2):
 
         while True:
             for enemy in self.target_enemies:
-                if enemy.rect and self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x or (isinstance(self.parent, StandardEnemy) and self.parent.rect.x - 20 > enemy.rect.x):
+                if enemy.rect and (self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x or isinstance(self.parent, StandardEnemy) and self.parent.rect.x - 20 > enemy.rect.x):
                     curr_enemy_dist = math.sqrt((self.parent.rect.x - enemy.rect.x)**2 + (self.parent.rect.y - enemy.rect.y)**2)
                     if curr_enemy_dist < self.prev_enemy_dist and self.closest_enemy.is_alive or not self.closest_enemy.is_alive:
                         self.closest_enemy = enemy
                         self.prev_enemy_dist = curr_enemy_dist
-                
                 else:
                     self.closest_enemy = None
                         
@@ -606,7 +616,7 @@ class Ship(metaclass=ABCMeta):
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
         self.sprite_collection: list[pg.Surface] = self.parent.sprite_collections.get(self.sprite_collection_name)
         self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5)
-        self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection)
+        self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection) 
         self.sprite_frame_duration: float = self.max_sprite_frame_duration
         self.sprite_frame_index: int = 0
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [100, 100])
@@ -656,6 +666,7 @@ class Ship(metaclass=ABCMeta):
     def death_animation(self):
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
             while self.sprite_frame_duration > 0:
+                
                 self.currentLevel.parent.screen.blit(
                     pg.transform.scale(
                         self.sprite_collection[self.sprite_frame_index], 
@@ -666,7 +677,7 @@ class Ship(metaclass=ABCMeta):
                         self.rect.y + ((self.rect.height - self.sprite_size[1])//2)
                     )
                 )
-
+            
                 self.death_anim_duration -= self.currentLevel.dt
                 self.sprite_frame_duration -= self.currentLevel.dt
                 yield
@@ -859,8 +870,9 @@ class PowerupWeapon(Powerup):
         self.weapon: Weapon = kwargs.get("weapon", Weapon1(currentLevel, parent=None))
 
     def handle_collision(self):
-        if self.rect.colliderect(self.currentLevel.player.rect):
+        if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
             self.active = True
+            self.rect = None
     
     def effect(self):
         self.currentLevel.player.weapon = self.weapon
@@ -879,8 +891,9 @@ class PowerupHealth(Powerup):
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
 
     def handle_collision(self):
-        if self.rect.colliderect(self.currentLevel.player.rect):
+        if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
             self.active = True
+            self.rect = None
             
     def effect(self):
         self.currentLevel.player.give_health(self.health_value)
@@ -893,14 +906,16 @@ class PowerupShield(Powerup):
         super().__init__(currentLevel, parent, **kwargs)
 
     def handle_collision(self):
-        if self.rect.colliderect(self.currentLevel.player.rect):
+        if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
             self.active = True
             self.rect = None
     
     def effect(self):
+        
         self.duration -= self.currentLevel.dt
 
         if not self.currentLevel.player.immune and not self.currentLevel.parent.interface_health_bar_color:
+            print("fieof")
             self.currentLevel.player.immune = True
             self.currentLevel.parent.interface_health_bar_color = (0, 150, 255)
 
@@ -921,7 +936,8 @@ class PowerupDamageBoost(Powerup):
         self.prev_round_color: tuple[int,int,int] = None
 
     def handle_collision(self):
-        if self.rect.colliderect(self.currentLevel.player.rect):
+        
+        if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
             self.active = True
             self.rect = None
     
@@ -948,22 +964,65 @@ class PowerupDamageBoost(Powerup):
 class Meteorite(Ship):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
-        
-        self.vel: float = kwargs.get("vel", 2)
 
+        self.vel: float = 1
+        self.damage: float = 0
+        self.passed_screen: bool = True
+        self.cooldown: float = 0
+        self.spawn_position = [-500, -500]
+
+        self.max_death_animation_duration = self.death_anim_duration
+        
         self.image_path = kwargs.get("image_path", "images/meteorite.png")
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
         self.rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
 
-        self.damage: float = kwargs.get("damage", 50)
-    
     def shoot(self):
         return
     
-    # TODO: when meteorite goes off screen, reset to random position, angle, vel, health, damage and size
     def update_position(self):
-        self.rect.x += math.cos(math.radians(self.angle)) * self.vel
-        self.rect.y += -math.sin(math.radians(self.angle)) * self.vel
+        if not self.rect:
+            self.rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
+        
+        if self.cooldown > 0: self.cooldown -= self.currentLevel.dt
+
+        if self.cooldown <= 0:
+            # checks if meteor has appeared on screen
+            if not self.passed_screen and self.currentLevel.is_rect_onscreen(self.rect):
+                self.passed_screen = True
+
+            # if meteor has previously come on screen and also left screen
+            if not self.is_alive or self.passed_screen and not self.currentLevel.is_rect_onscreen(self.rect):
+                
+                # checks if the meteor is fully off screen
+                if 0 > self.rect.x + self.rect.width + 10 \
+                or self.rect.x - self.rect.width  - 10 > self.currentLevel.parent.screen_w \
+                or 0 > self.rect.y + self.rect.height + 10 \
+                or self.rect.y - self.rect.width - 10 > self.currentLevel.parent.screen_h: 
+                    
+                    self.cooldown = random.randint(*self.currentLevel.meteorite_cooldown_range)
+                    self.damage = random.randint(*self.currentLevel.meteorite_damage_range)
+                    self.health = self.max_health = random.randint(*self.currentLevel.meteorite_health_range)
+                    self.rect.width = self.rect.height = random.randint(*self.currentLevel.meteorite_size_range)
+                    self.image = pg.transform.scale(self.image, (self.rect.width, self.rect.height))
+                    self.rect.x = random.randint(*self.currentLevel.meteorite_spawn_x_position_range)
+                    self.rect.y = random.choice([-150, self.currentLevel.parent.screen_h + 100])
+                    self.vel = random.randint(*self.currentLevel.meteorite_vel_range)
+                    self.is_alive = True
+                    self.death_anim_duration = self.max_death_animation_duration
+
+                    self.sprite_frame_index = 0
+                    self.sprite_frame_duration = self.max_sprite_frame_duration
+             
+                    if self.rect.y > 0:
+                        self.angle = random.randint(80, 160)
+                    else:
+                        self.angle = random.randint(200, 260)
+
+                    self.passed_screen = False
+            
+            self.rect.x += math.cos(math.radians(self.angle)) * self.vel
+            self.rect.y += -math.sin(math.radians(self.angle)) * self.vel
     
     def handle_health(self):
         if self.health <= 0:
@@ -976,7 +1035,8 @@ class Meteorite(Ship):
         self.currentLevel.parent.screen.blit(self.image, self.rect)
 
     def handle_collision(self):
-        if self.rect.colliderect(self.currentLevel.player.rect):
+
+        if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
             self.currentLevel.player.take_health(self.damage)
             self.is_alive = False
     
