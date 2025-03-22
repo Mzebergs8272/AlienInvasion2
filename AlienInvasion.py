@@ -222,8 +222,6 @@ class Level:
                 if powerup.finished:
                     self.powerups.remove(powerup)
 
-           
-
             for meteorite in self.meteorites:
                 if meteorite.is_alive or not meteorite.rect:
                     meteorite.update_position()
@@ -247,8 +245,9 @@ class Level:
 
                 next(self.player.move_to_cursor())
                 if self.is_rect_onscreen(self.player.rect): next(self.player.shoot())
-                next(self.player.weapon.update_rounds())
-                self.player.handle_bullet_collision() 
+                if self.player.weapon.rounds:
+                    next(self.player.weapon.update_rounds())
+                    self.player.handle_bullet_collision() 
             else:
                 next(self.player.death_animation())
             
@@ -521,7 +520,7 @@ class Weapon4(Weapon2):
         self.prev_enemy_dist: float = 9999
 
     def get_closest_enemy_angle(self, round: Round) -> float | None:
-        if not self.closest_enemy: 
+        if not self.closest_enemy or not self.closest_enemy.is_alive: 
             return self.shoot_angle
         adj = self.closest_enemy.rect.x + self.closest_enemy.width//2 - round.rect.x
         opp = self.closest_enemy.rect.y + self.closest_enemy.height//2 - round.rect.y
@@ -554,7 +553,7 @@ class Weapon4(Weapon2):
                     self.closest_enemy = None
                         
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
-            if self.shoot_cooldown <= 0:
+            if self.shoot_cooldown <= 0 and self.closest_enemy.is_alive:
 
                 round1 = Round(
                     self.currentLevel, 
@@ -613,13 +612,14 @@ class Ship(metaclass=ABCMeta):
         self.is_alive: bool = True
 
         # death animation
+    
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
         self.sprite_collection: list[pg.Surface] = self.parent.sprite_collections.get(self.sprite_collection_name)
-        self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5)
+        self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + 0.2
         self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection) 
         self.sprite_frame_duration: float = self.max_sprite_frame_duration
         self.sprite_frame_index: int = 0
-        self.sprite_size: list[int, int] = kwargs.get("sprite_size", [100, 100])
+        self.sprite_size: list[int, int] = kwargs.get("sprite_size", [self.width, self.width])
         
         # ship sprite
         self.angle = kwargs.get("angle", 270)
@@ -687,7 +687,7 @@ class Ship(metaclass=ABCMeta):
 
         self.rect = None
 
-        yield  
+        yield   
         
 
 
@@ -911,11 +911,9 @@ class PowerupShield(Powerup):
             self.rect = None
     
     def effect(self):
-        
         self.duration -= self.currentLevel.dt
 
         if not self.currentLevel.player.immune and not self.currentLevel.parent.interface_health_bar_color:
-            print("fieof")
             self.currentLevel.player.immune = True
             self.currentLevel.parent.interface_health_bar_color = (0, 150, 255)
 
@@ -1013,6 +1011,7 @@ class Meteorite(Ship):
 
                     self.sprite_frame_index = 0
                     self.sprite_frame_duration = self.max_sprite_frame_duration
+                    self.sprite_size = [self.rect.width, self.rect.width]
              
                     if self.rect.y > 0:
                         self.angle = random.randint(80, 160)

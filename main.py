@@ -9,7 +9,7 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
             currentLevel, 
             parent=currentLevel, 
             spawn_position=[left, top + (spacing * i)], 
-            sprite_collection_name="explosion3", 
+            sprite_collection_name="explosion1", 
             width=kwargs.get("width", 100),
             height=kwargs.get("height", 75),
             random_shoot_cooldowns=kwargs.get("random_shoot_cooldowns", [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3]),
@@ -72,16 +72,17 @@ sprite_collections = {
 
 
 
+
 level1: Level = Level(
     parent=game, 
     sprite_collections=sprite_collections,
-    meteorite_spawn_x_position_range=[700, 1200],
+    meteorite_spawn_x_position_range=[700, 1000],
     # meteorite_angle_range=[180, 270],
     meteorite_health_range=[200, 400],
     meteorite_vel_range=[1, 5],
     meteorite_size_range=[30, 150],
     meteorite_damage_range=[20, 100],
-    meteorite_cooldown_range=[1, 1],
+    meteorite_cooldown_range=[1, 5],
 )
 
 # player
@@ -89,7 +90,7 @@ player: Ship = Player(
     level1, 
     parent=level1,
     vel=10, 
-    sprite_collection_name="explosion3",
+    sprite_collection_name="explosion1",
     spawn_position=[150, game.screen_h//2],
     max_health=200
 )
@@ -110,7 +111,7 @@ big_enemy = StandardEnemy(
     width=150, 
     height=150, 
     spawn_position=[1100, 250], 
-    sprite_collection_name="explosion3",
+    sprite_collection_name="explosion1",
     random_shoot_cooldowns=[1], 
     max_health=2000
 )
@@ -146,18 +147,21 @@ powerup6 = PowerupShield(level1, parent=level1, cooldown=10, spawn_position=[ran
 
 
 level1.powerup_queue = [
-    #powerup1, 
-    # powerup2,
-    # powerup3,
-    # powerup4,
+    powerup1, 
+    powerup2,
+    powerup3,
+    powerup4,
     powerup5,
     powerup6
 ]
 
-meteorite1 = Meteorite(level1, parent=level1, sprite_collection_name="explosion3")
-
+meteorite1 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
+meteorite2 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
+meteorite3 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
 level1.meteorites = [
-    meteorite1
+    meteorite1,
+    meteorite2,
+    meteorite3
 ]
 
 game.levels = [level1]
