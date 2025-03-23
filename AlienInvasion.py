@@ -553,7 +553,7 @@ class Weapon4(Weapon2):
                     self.closest_enemy = None
                         
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
-            if self.shoot_cooldown <= 0 and self.closest_enemy.is_alive:
+            if self.shoot_cooldown <= 0 and self.closest_enemy and self.closest_enemy.is_alive:
 
                 round1 = Round(
                     self.currentLevel, 
@@ -612,21 +612,28 @@ class Ship(metaclass=ABCMeta):
         self.is_alive: bool = True
 
         # death animation
+        self.num_death_explosions: int = kwargs.get("num_death_explosions", 3)
+
+        # total interval time between each explosion
+        self.max_death_explosion_interval_time: float = kwargs.get("death_explosion_max_interval_time", 0.2)
+        self.death_explosion_interval_time: float = self.max_death_explosion_interval_time
     
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
         self.sprite_collection: list[pg.Surface] = self.parent.sprite_collections.get(self.sprite_collection_name)
-        self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + 0.2
+        self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + self.max_death_explosion_interval_time
         self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection) 
         self.sprite_frame_duration: float = self.max_sprite_frame_duration
-        self.sprite_frame_index: int = 0
+        self.sprite_frame_indexes: list[int] = [0] * self.num_death_explosions
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [self.width, self.width])
+        self.death_explosion_positions = [[random.randint(-50, 50), random.randint(-50, 50)] for _ in range(4)]
         
         # ship sprite
         self.angle = kwargs.get("angle", 270)
         self.image_path: str = kwargs.get("image_path", "images/player/player_ship.png")
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
         self.rect: pg.Rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
-        
+
+     
         # hit/damage indication
         self.image_hit_path: str = kwargs.get("image_hit_path", "images/player/player_ship_hit1.png")
         self.image_hit: pg.Surface = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
@@ -664,25 +671,33 @@ class Ship(metaclass=ABCMeta):
         yield
 
     def death_animation(self):
+        
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
             while self.sprite_frame_duration > 0:
-                
-                self.currentLevel.parent.screen.blit(
-                    pg.transform.scale(
-                        self.sprite_collection[self.sprite_frame_index], 
-                        self.sprite_size
-                    ), 
-                    (
-                        self.rect.x + ((self.rect.width - self.sprite_size[0])//2), 
-                        self.rect.y + ((self.rect.height - self.sprite_size[1])//2)
-                    )
-                )
-            
+
+                for i in range(self.num_death_explosions, 0, -1):
+                    if self.death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
+
+                        self.currentLevel.parent.screen.blit(
+                            pg.transform.scale(
+                                self.sprite_collection[self.sprite_frame_indexes[self.num_death_explosions - i]], 
+                                self.sprite_size
+                            ), 
+                            (
+                                self.rect.x + ((self.rect.width - self.sprite_size[0])//2) + self.death_explosion_positions[self.num_death_explosions - i][0], 
+                                self.rect.y + ((self.rect.height - self.sprite_size[1])//2) + self.death_explosion_positions[self.num_death_explosions - i][1]
+                            )
+                        )
+
+                self.death_explosion_interval_time -= self.currentLevel.dt
                 self.death_anim_duration -= self.currentLevel.dt
                 self.sprite_frame_duration -= self.currentLevel.dt
                 yield
 
-            self.sprite_frame_index += 1
+            for i in range(self.num_death_explosions, 0, -1):
+                if self.death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
+                    self.sprite_frame_indexes[self.num_death_explosions - i] += 1
+          
             self.sprite_frame_duration = self.max_sprite_frame_duration
 
         self.rect = None
@@ -1009,7 +1024,7 @@ class Meteorite(Ship):
                     self.is_alive = True
                     self.death_anim_duration = self.max_death_animation_duration
 
-                    self.sprite_frame_index = 0
+                    self.sprite_frame_indexes = [0] * self.num_death_explosions
                     self.sprite_frame_duration = self.max_sprite_frame_duration
                     self.sprite_size = [self.rect.width, self.rect.width]
              
