@@ -1,5 +1,5 @@
 from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost, Meteorite
-import random
+import random, copy
 
 def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
     fleet = []
@@ -36,8 +36,9 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
     return fleet
 
 powerup_icons = {
-    PowerupDamageBoost: "images/ui/icon-powerup.png",
-    PowerupShield: "images/ui/icon-powerup.png",
+    PowerupDamageBoost: "images/Health & Ammo Pickups/ammo-rifle 32px.png",
+    PowerupShield: "images/Health & Ammo Pickups/health-armor 32px.png",
+   
 }
 
 game: Game = Game(powerup_icons=powerup_icons)
@@ -92,13 +93,14 @@ player: Ship = Player(
     vel=10, 
     sprite_collection_name="explosion1",
     spawn_position=[150, game.screen_h//2],
-    max_health=200
+    max_health=300
 )
-weapon1: Weapon = Weapon2(
+weapon1: Weapon = Weapon1(
     level1, 
     parent=player, 
     max_shoot_cooldown=0.2, 
     round_sprite_collection_name="explosion1", 
+    damage=20
 
 )
 
@@ -113,7 +115,8 @@ big_enemy = StandardEnemy(
     spawn_position=[1100, 250], 
     sprite_collection_name="explosion1",
     random_shoot_cooldowns=[1], 
-    max_health=2000
+    max_health=2000,
+    num_death_explosions=10
 )
 
 big_enemy_weapon = Weapon4(
@@ -126,24 +129,26 @@ big_enemy_weapon = Weapon4(
     rotation_speed=10, 
     damage=5, 
     shoot_angle=180, 
-    round_size=[12, 12]
+    round_size=[12, 12],
+    
 )
 
 big_enemy.weapon = big_enemy_weapon
 
-level1.enemy_queue = [instantiate_fleet(level1, 7, 1250, -75, 100) + instantiate_fleet(level1, 7, 1100, -75, 100), 
-                      instantiate_fleet(level1, 7, 1250, -75, 100) + [big_enemy], 
+level1.enemy_queue = [
+    instantiate_fleet(level1, 7, 1250, -75, 100) + instantiate_fleet(level1, 7, 1100, -75, 100), 
+    instantiate_fleet(level1, 7, 1250, -75, 100) + [big_enemy], 
                       ]
 
 powerup_cooldown_range = [5, 30]
 powerup_spawn_range = [300, 1000]
 
-powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon4(level1, parent=None, round_sprite_collection_name="explosion1"), spawn_position=[500, -50])
-powerup2 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10)
-powerup3 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10)
-powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, new_damage_value=50)
-powerup5 = PowerupShield(level1, parent=level1, cooldown=1, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, new_damage_value=50)
-powerup6 = PowerupShield(level1, parent=level1, cooldown=10, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, new_damage_value=50)
+powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon2(level1, parent=None, round_sprite_collection_name="explosion1", damage=20), spawn_position=[500, -50], width=50, height=50)
+powerup2 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
+powerup3 = PowerupHealth(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
+powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, new_damage_value=50, width=75, height=75)
+powerup5 = PowerupShield(level1, parent=level1, cooldown=1, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
+powerup6 = PowerupShield(level1, parent=level1, cooldown=10, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
 
 
 level1.powerup_queue = [
@@ -163,6 +168,8 @@ level1.meteorites = [
     meteorite2,
     meteorite3
 ]
+
+
 
 game.levels = [level1]
 game.start()

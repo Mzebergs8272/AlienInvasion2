@@ -1,9 +1,8 @@
-import pygame as pg, sys, math, os, random, colorsys, cv2, types
+import pygame as pg, sys, math, os, random, colorsys, cv2
 
 from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet sprites
-# TODO: change ship explosion sprite animation
 # TODO: add sprite animation to meteorite
 
 class Game:
@@ -22,7 +21,7 @@ class Game:
 
         # interface
         self.interface_h: int = kwargs.get("interface_h", 100)
-
+        
         #powerup bars
         self.powerup_grid_position: tuple[int, int] = kwargs.get("powerup_grid_position", (350, self.screen_h - self.interface_h + 10))
        
@@ -67,16 +66,18 @@ class Game:
             pg.draw.rect(self.screen, (0, 0, 0), self.interface_health_bar_background)
             hls = colorsys.hls_to_rgb((self.interface_health_bar.width / self.interface_health_bar_max_w * 100)/360, 0.5, 1)
             
-            prev_height = self.interface_health_bar.width + 4
+            prev_width = self.interface_health_bar.width + 4
 
-            if self.interface_health_bar.width > health / max_health * self.interface_health_bar_max_w:
+            health_width = health / max_health * self.interface_health_bar_max_w
+
+            if self.interface_health_bar.width > health_width:
                 self.interface_health_bar.width -= 2
                 
-            if self.interface_health_bar.width < health / max_health * self.interface_health_bar_max_w:
+            if self.interface_health_bar.width < health_width:
                 self.interface_health_bar.width += 6
 
-            if prev_height == self.interface_health_bar.width:
-                self.interface_health_bar.width = health / max_health * self.interface_health_bar_max_w
+            if prev_width == self.interface_health_bar.width or health_width + 1 == self.interface_health_bar.width or health_width - 1 == self.interface_health_bar.width:
+                self.interface_health_bar.width = health_width
            
             pg.draw.rect(self.screen, self.interface_health_bar_color or list((i*255 for i in hls)), self.interface_health_bar)
 
@@ -98,7 +99,6 @@ class Game:
                 pg.draw.rect(self.screen, (0, 0, 0), (barx, bary, self.powerup_bar_max_w, self.powerup_bar_h))
                 pg.draw.rect(self.screen, (0, 150, 255), (barx, bary, powerup.duration / (powerup.max_duration) * self.powerup_bar_max_w, self.powerup_bar_h))
             
-
     def draw_interface(self):
         pg.draw.rect(self.screen, (50, 50, 50), (0, self.screen_h - self.interface_h, self.screen_w, self.interface_h))
             
@@ -190,8 +190,10 @@ class Level:
                             self.powerups.remove(powerup2)
             else:
                 self.active_powerups.remove(powerup1)
-            
-      
+    
+    def handle_level_completion(self) -> bool:
+        if not self.enemies and not self.enemy_queue:
+            self.running = False
 
     def start(self) -> None:
         while self.running:
@@ -263,6 +265,8 @@ class Level:
             self.parent.draw_interface()
             next(self.parent.draw_player_health(self.player.health, self.player.max_health))
             self.parent.draw_active_powerups()
+
+            self.handle_level_completion()
             
             pg.display.update()
             self.dt = self.clock.tick(self.parent.fps) / 1000
@@ -625,7 +629,7 @@ class Ship(metaclass=ABCMeta):
         self.sprite_frame_duration: float = self.max_sprite_frame_duration
         self.sprite_frame_indexes: list[int] = [0] * self.num_death_explosions
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [self.width, self.width])
-        self.death_explosion_positions = [[random.randint(-50, 50), random.randint(-50, 50)] for _ in range(4)]
+        self.death_explosion_positions = [[random.randint(-self.width//2, self.width//2), random.randint(-self.height//2, self.height//2)] for _ in range(self.num_death_explosions)]
         
         # ship sprite
         self.angle = kwargs.get("angle", 270)
@@ -902,7 +906,7 @@ class PowerupHealth(Powerup):
 
         self.health_value: float = kwargs.get("health_value", 50)
 
-        self.image_path: str = kwargs.get("image_path", "images/ui/icon-health.png")
+        self.image_path: str = kwargs.get("image_path", "images/Health & Ammo Pickups/health-green 32px.png")
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
 
     def handle_collision(self):
@@ -919,6 +923,9 @@ class PowerupHealth(Powerup):
 class PowerupShield(Powerup):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         super().__init__(currentLevel, parent, **kwargs)
+
+        self.image_path: str = kwargs.get("image_path", "images/Health & Ammo Pickups/health-armor 32px.png")
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
 
     def handle_collision(self):
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
@@ -947,6 +954,9 @@ class PowerupDamageBoost(Powerup):
 
         self.prev_weapon_damage: float = None
         self.prev_round_color: tuple[int,int,int] = None
+
+        self.image_path: str = kwargs.get("image_path", "images/Health & Ammo Pickups/ammo-rifle 32px.png")
+        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
 
     def handle_collision(self):
         
@@ -1026,12 +1036,14 @@ class Meteorite(Ship):
 
                     self.sprite_frame_indexes = [0] * self.num_death_explosions
                     self.sprite_frame_duration = self.max_sprite_frame_duration
-                    self.sprite_size = [self.rect.width, self.rect.width]
+                    self.sprite_size = [self.rect.width, self.rect.height]
              
                     if self.rect.y > 0:
                         self.angle = random.randint(80, 160)
                     else:
                         self.angle = random.randint(200, 260)
+
+                    
 
                     self.passed_screen = False
             
