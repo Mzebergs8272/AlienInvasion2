@@ -1,9 +1,10 @@
 import pygame as pg, sys, math, os, random, colorsys, cv2
-
 from abc import abstractmethod, ABCMeta
+
 
 # TODO: create bullet sprites
 # TODO: add sprite animation to meteorite
+# TODO: fix health bar not changing color from blue to green between levels
 
 class Game:
     def __init__(self, **kwargs):
@@ -26,7 +27,7 @@ class Game:
         self.powerup_grid_position: tuple[int, int] = kwargs.get("powerup_grid_position", (350, self.screen_h - self.interface_h + 10))
        
         self.powerup_icons: dict[Powerup, str | pg.Surface] = kwargs.get("powerup_icons", {})
-        
+
         #health bar
         self.interface_health_bar_max_w: int = 300
         self.interface_health_bar: pg.Rect = pg.Rect(10, self.screen_h - self.interface_h + 10, self.interface_health_bar_max_w, 80)
@@ -35,7 +36,7 @@ class Game:
         self.powerup_bar_max_w: int = kwargs.get("powerup_bar_max_w", 100)
         self.powerup_bar_h: int = kwargs.get("powerup_bar_h", 25)
 
-        self.load_ui_images()
+    
 
     def check_events(self) -> None:
         for event in pg.event.get():
@@ -49,17 +50,23 @@ class Game:
 
     def start(self) -> None:
         pg.init()
-        for level in self.levels:
-            self.currentLevel = level
-            while self.running:
-                self.check_events()
-                # between-level graphics here
-                # initialise level here
+        self.load_ui_images()
+        while self.running:
+            self.check_events()
+            # between-level graphics here
+            for level in self.levels:
+                level: Level = level(parent=self)
+                level.load_sprites()
                 
-                level.start()
-
-                pg.display.flip()
-                self.clock.tick(self.fps)
+                if level.running:
+                    self.currentLevel = level
+                    
+                    # initialise level here
+                    print(level.powerup_queue[0].cooldown, level.powerup_queue[1].cooldown)
+                    level.start()
+                 
+            pg.display.flip()
+            self.clock.tick(self.fps)
     
     def draw_player_health(self, health, max_health):
         while health > 0:
@@ -136,10 +143,8 @@ class Level:
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
-                                      
-        self.load_sprites()
 
-    def load_sprites(self):
+    def load_sprites(self) -> None:
         for name, collection in self.sprite_collections.items():
             self.sprite_collections[name] = [pg.image.load(path) for path in collection]
 
@@ -196,6 +201,8 @@ class Level:
             self.running = False
 
     def start(self) -> None:
+        # for powerup in self.powerup_queue:
+        #     print(powerup.cooldown)
         while self.running:
             self.keys = pg.key.get_pressed()
             self.check_events()
@@ -212,6 +219,7 @@ class Level:
             self.parent.screen.blit(bg_vid_surface, (0, 0))
 
             self.handle_powerups()
+         
             for powerup in self.powerups:
                 if powerup.rect:
                     powerup.draw()
@@ -238,6 +246,7 @@ class Level:
                     enemy.draw()
                 elif not enemy.rect:
                     self.enemies.remove(enemy)
+                    # using remove(enemy) in foreach loop is bad
             
             if not self.enemies:
                 self.handle_enemies()
@@ -291,9 +300,8 @@ class Round:
 
         # death animation
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
-        self.sprite_collection: list[pg.Surface] = self.currentLevel.sprite_collections.get(self.sprite_collection_name)
         self.death_anim_duration = kwargs.get("death_anim_duration", 0.2)
-        self.max_sprite_frame_duration = self.death_anim_duration / len(self.sprite_collection)
+        self.max_sprite_frame_duration = self.death_anim_duration / len(self.currentLevel.sprite_collections[self.sprite_collection_name])
         self.sprite_frame_duration = self.max_sprite_frame_duration
         self.sprite_frame_index = 0
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [35, 35])
@@ -302,13 +310,11 @@ class Round:
         pg.draw.rect(self.currentLevel.parent.screen, self.color, self.rect)
     
     def death_animation(self):
-        if not isinstance(self.sprite_collection[0], pg.Surface): 
-            self.sprite_collection = self.parent.parent.parent.sprite_collections["explosion1"]
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
             while self.sprite_frame_duration > 0:
                 self.currentLevel.parent.screen.blit(
                     pg.transform.scale(
-                        self.sprite_collection[self.sprite_frame_index], 
+                        self.currentLevel.sprite_collections[self.sprite_collection_name][self.sprite_frame_index], 
                         self.sprite_size
                     ), 
                     (
@@ -603,7 +609,7 @@ class Ship(metaclass=ABCMeta):
 
         self.spawn_position: list[int, int] = kwargs.get("spawn_position", [50, 50])
 
-        #health
+        # health
         self.max_health: float = kwargs.get("max_health", 100)
         self.health: float = self.max_health
         self.immune: bool = kwargs.get("immune", False)
@@ -623,9 +629,8 @@ class Ship(metaclass=ABCMeta):
         self.death_explosion_interval_time: float = self.max_death_explosion_interval_time
     
         self.sprite_collection_name: str = kwargs.get("sprite_collection_name", None)
-        self.sprite_collection: list[pg.Surface] = self.parent.sprite_collections.get(self.sprite_collection_name)
         self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + self.max_death_explosion_interval_time
-        self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.sprite_collection) 
+        self.max_sprite_frame_duration: float = self.death_anim_duration / len(self.currentLevel.sprite_collections[self.sprite_collection_name]) 
         self.sprite_frame_duration: float = self.max_sprite_frame_duration
         self.sprite_frame_indexes: list[int] = [0] * self.num_death_explosions
         self.sprite_size: list[int, int] = kwargs.get("sprite_size", [self.width, self.width])
@@ -684,7 +689,7 @@ class Ship(metaclass=ABCMeta):
 
                         self.currentLevel.parent.screen.blit(
                             pg.transform.scale(
-                                self.sprite_collection[self.sprite_frame_indexes[self.num_death_explosions - i]], 
+                                self.currentLevel.sprite_collections[self.sprite_collection_name][self.sprite_frame_indexes[self.num_death_explosions - i]], 
                                 self.sprite_size
                             ), 
                             (
@@ -798,7 +803,7 @@ class StandardEnemy(Ship):
             self.shoot_cooldown -= self.currentLevel.dt
             self.weapon.shoot_cooldown -= self.currentLevel.dt
 
-            if self.shoot_cooldown <= 0 and self.parent.is_rect_onscreen(self.rect):
+            if self.shoot_cooldown <= 0 and self.currentLevel.is_rect_onscreen(self.rect):
                 next(self.weapon.shoot([self.rect.x, self.rect.y + self.rect.height//2]))
                 self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
 

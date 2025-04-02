@@ -35,141 +35,143 @@ def instantiate_fleet(currentLevel: Level, num: int, left: int, top: int, spacin
         
     return fleet
 
+        
 powerup_icons = {
     PowerupDamageBoost: "images/Health & Ammo Pickups/ammo-rifle 32px.png",
     PowerupShield: "images/Health & Ammo Pickups/health-armor 32px.png",
-   
 }
 
 game: Game = Game(powerup_icons=powerup_icons)
 
-sprite_collections = {
-    "explosion1": 
-    [
-        "images/explosions/explosion1/explosion001.png",
-        "images/explosions/explosion1/explosion002.png",
-        "images/explosions/explosion1/explosion003.png",
-        "images/explosions/explosion1/explosion004.png",
-        "images/explosions/explosion1/explosion005.png",
-        "images/explosions/explosion1/explosion006.png",
-        "images/explosions/explosion1/explosion007.png",
-        "images/explosions/explosion1/explosion008.png",
-    ],
-    "explosion2": 
-    [
-        "images/explosions/explosion2/explosion001.png",
-        "images/explosions/explosion2/explosion002.png",
-        "images/explosions/explosion2/explosion003.png",
-        "images/explosions/explosion2/explosion004.png"
-    ],
-    "explosion3":
-    [
-        "images/explosions/explosion3/explosion001.png",
-        "images/explosions/explosion3/explosion002.png",
-        "images/explosions/explosion3/explosion003.png",
-        "images/explosions/explosion3/explosion004.png"
-    ]
-}
+class Level1(Level):
+    def __init__(self, parent: Game, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.sprite_collections = {
+            "explosion1": 
+            [
+                "images/explosions/explosion1/explosion001.png",
+                "images/explosions/explosion1/explosion002.png",
+                "images/explosions/explosion1/explosion003.png",
+                "images/explosions/explosion1/explosion004.png",
+                "images/explosions/explosion1/explosion005.png",
+                "images/explosions/explosion1/explosion006.png",
+                "images/explosions/explosion1/explosion007.png",
+                "images/explosions/explosion1/explosion008.png",
+            ],
+            "explosion2": 
+            [
+                "images/explosions/explosion2/explosion001.png",
+                "images/explosions/explosion2/explosion002.png",
+                "images/explosions/explosion2/explosion003.png",
+                "images/explosions/explosion2/explosion004.png"
+            ],
+            "explosion3":
+            [
+                "images/explosions/explosion3/explosion001.png",
+                "images/explosions/explosion3/explosion002.png",
+                "images/explosions/explosion3/explosion003.png",
+                "images/explosions/explosion3/explosion004.png"
+            ]
+        }
+        
 
+        
+        self.meteorite_spawn_x_position_range=[700, 1000]
+        #self.meteorite_angle_range=[180, 270]
+        self.meteorite_health_range=[200, 400]
+        self.meteorite_vel_range=[1, 5]
+        self.meteorite_size_range=[30, 150]
+        self.meteorite_damage_range=[20, 100]
+        self.meteorite_cooldown_range=[1, 5]
 
-
-
-level1: Level = Level(
-    parent=game, 
-    sprite_collections=sprite_collections,
-    meteorite_spawn_x_position_range=[700, 1000],
-    # meteorite_angle_range=[180, 270],
-    meteorite_health_range=[200, 400],
-    meteorite_vel_range=[1, 5],
-    meteorite_size_range=[30, 150],
-    meteorite_damage_range=[20, 100],
-    meteorite_cooldown_range=[1, 5],
-)
-
-# player
-player: Ship = Player(
-    level1, 
-    parent=level1,
-    vel=10, 
-    sprite_collection_name="explosion1",
-    spawn_position=[150, game.screen_h//2],
-    max_health=300
-)
-weapon1: Weapon = Weapon1(
-    level1, 
-    parent=player, 
-    max_shoot_cooldown=0.2, 
-    round_sprite_collection_name="explosion1", 
-    damage=20
-
-)
-
-player.weapon = weapon1
-level1.player = player
-
-big_enemy = StandardEnemy(
-    level1, 
-    parent=level1, 
-    width=150, 
-    height=150, 
-    spawn_position=[1100, 250], 
-    sprite_collection_name="explosion1",
-    random_shoot_cooldowns=[1], 
-    max_health=2000,
-    num_death_explosions=10
-)
-
-big_enemy_weapon = Weapon4(
-    level1, 
-    parent=big_enemy, 
-    round_sprite_collection_name="explosion1", 
-    max_shoot_cooldown=0, 
-    shoot_cooldown=0, 
-    round_vel=3, 
-    rotation_speed=10, 
-    damage=5, 
-    shoot_angle=180, 
-    round_size=[12, 12],
+        # player
+        self.player: Ship = Player(
+            self, 
+            parent=self,
+            vel=10, 
+            sprite_collection_name="explosion1",
+            spawn_position=[150, self.parent.screen_h//2],
+            max_health=300, 
+        )
+        weapon1: Weapon = Weapon1(
+            self, 
+            parent=self.player, 
+            max_shoot_cooldown=0.2, 
+            round_sprite_collection_name="explosion1", 
+            damage=100
+        )
     
-)
+        self.player.weapon = weapon1
+        
+        big_enemy = StandardEnemy(
+            self, 
+            parent=self, 
+            width=150, 
+            height=150, 
+            spawn_position=[1100, 250], 
+            sprite_collection_name="explosion1",
+            random_shoot_cooldowns=[1], 
+            max_health=2000,
+            num_death_explosions=10
+        )
 
-big_enemy.weapon = big_enemy_weapon
+        big_enemy_weapon = Weapon4(
+            self, 
+            parent=big_enemy, 
+            round_sprite_collection_name="explosion1", 
+            max_shoot_cooldown=0, 
+            shoot_cooldown=0, 
+            round_vel=3, 
+            rotation_speed=10, 
+            damage=5, 
+            shoot_angle=180, 
+            round_size=[12, 12],
+            
+        )
 
-level1.enemy_queue = [
-    instantiate_fleet(level1, 7, 1250, -75, 100) + instantiate_fleet(level1, 7, 1100, -75, 100), 
-    instantiate_fleet(level1, 7, 1250, -75, 100) + [big_enemy], 
-                      ]
+        big_enemy.weapon = big_enemy_weapon
 
-powerup_cooldown_range = [5, 30]
-powerup_spawn_range = [300, 1000]
+        self.enemy_queue = [
+            instantiate_fleet(self, 7, 1250, -75, 100) + instantiate_fleet(self, 7, 1100, -75, 100), 
+            instantiate_fleet(self, 7, 1250, -75, 100) + [big_enemy], 
+                            ]
 
-powerup1 = PowerupWeapon(level1, parent=level1, weapon=Weapon2(level1, parent=None, round_sprite_collection_name="explosion1", damage=20), spawn_position=[500, -50], width=50, height=50)
-powerup2 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
-powerup3 = PowerupHealth(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
-powerup4 = PowerupDamageBoost(level1, parent=level1, cooldown=random.randint(*powerup_cooldown_range), spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, new_damage_value=50, width=75, height=75)
-powerup5 = PowerupShield(level1, parent=level1, cooldown=1, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
-powerup6 = PowerupShield(level1, parent=level1, cooldown=10, spawn_position=[random.randint(*powerup_spawn_range), -50], duration=10, width=75, height=75)
+        self.powerup_cooldown_range = [5, 30]
+        self.powerup_spawn_range = [300, 1000]
+
+        powerup1 = PowerupWeapon(self, parent=self, cooldown=2, weapon=Weapon2(self, parent=None, round_sprite_collection_name="explosion1", damage=20), spawn_position=[500, -50], width=50, height=50)
+        powerup2 = PowerupDamageBoost(self, parent=self, cooldown=random.randint(*self.powerup_cooldown_range), spawn_position=[random.randint(*self.powerup_spawn_range), -50], duration=10, width=75, height=75)
+        powerup3 = PowerupHealth(self, parent=self, cooldown=random.randint(*self.powerup_cooldown_range), spawn_position=[random.randint(*self.powerup_spawn_range), -50], duration=10, width=75, height=75)
+        powerup4 = PowerupDamageBoost(self, parent=self, cooldown=random.randint(*self.powerup_cooldown_range), spawn_position=[random.randint(*self.powerup_spawn_range), -50], duration=10, new_damage_value=50, width=75, height=75)
+        powerup5 = PowerupShield(self, parent=self, cooldown=1, spawn_position=[random.randint(*self.powerup_spawn_range), -50], duration=10, width=75, height=75)
+        powerup6 = PowerupShield(self, parent=self, cooldown=10, spawn_position=[random.randint(*self.powerup_spawn_range), -50], duration=10, width=75, height=75)
+
+        self.powerup_queue = [
+            powerup1, 
+            powerup2,
+            powerup3,
+            powerup4,
+            powerup5,
+            powerup6
+        ]
+
+        meteorite1 = Meteorite(self, parent=self, sprite_collection_name="explosion1")
+        meteorite2 = Meteorite(self, parent=self, sprite_collection_name="explosion1")
+        meteorite3 = Meteorite(self, parent=self, sprite_collection_name="explosion1")
+        self.meteorites = [
+            meteorite1,
+            meteorite2,
+            meteorite3
+        ]
 
 
-level1.powerup_queue = [
-    powerup1, 
-    powerup2,
-    powerup3,
-    powerup4,
-    powerup5,
-    powerup6
-]
-
-meteorite1 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
-meteorite2 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
-meteorite3 = Meteorite(level1, parent=level1, sprite_collection_name="explosion1")
-level1.meteorites = [
-    meteorite1,
-    meteorite2,
-    meteorite3
-]
+class Level2(Level1):
+    def __init__(self, parent):
+        super().__init__(parent)
 
 
 
-game.levels = [level1]
+
+game.levels = [Level1, Level1]
+
 game.start()
