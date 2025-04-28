@@ -32,7 +32,7 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
         enemy_weapon.shoot_cooldown = 0
         enemy_weapon.round_death_sprite_collection_name="explosion1"
         enemy_weapon.shoot_angle = 180
-        enemy_weapon.round_image_path = "images\Pixel SHMUP Free 1.2\projectile_3.png"
+        enemy_weapon.round_image_path = "images/Pixel SHMUP Free 1.2/projectile_3.png"
 
         fleet.append(enemy)
         
@@ -50,7 +50,8 @@ class Level1(Level):
     def __init__(self, parent: Game, **kwargs):
         super().__init__(parent, **kwargs)
         self.soundfx_collection = {
-            "hitmarker_2": "sounds/hitmarker_3.wav"
+            "hitmarker_2": "sounds/hitmarker_4.wav",
+            "big_explosion_1": "sounds/big_explosion_1.wav",
         }
         self.sprite_collections = {
             "explosion1": 
@@ -120,7 +121,8 @@ class Level1(Level):
             death_sprite_collection_name="explosion1",
             random_shoot_cooldowns=[1], 
             max_health=2000,
-            num_death_explosions=10
+            num_death_explosions=10,
+            death_explosion_audio_name="big_explosion_1"
         )
 
         big_enemy_weapon = Weapon4(
@@ -134,6 +136,7 @@ class Level1(Level):
             damage=5, 
             round_size=[20, 20],
             
+            
                        
         )
 
@@ -141,8 +144,8 @@ class Level1(Level):
         
         # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
+            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
+            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
             create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 

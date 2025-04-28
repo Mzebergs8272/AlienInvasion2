@@ -313,7 +313,7 @@ class Round:
         self.death_sprite_size: list[int, int] = kwargs.get("death_sprite_size", [35, 35])
 
         # sprite 
-        self.image_path: str = kwargs.get("image_path", "images\Pixel SHMUP Free 1.2\projectile_1.png")
+        self.image_path: str = kwargs.get("image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
         if isinstance(self.parent, Weapon4): print(self.angle)
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
         self.rect: pg.Rect = pg.Rect(self.spawn_position[0], self.spawn_position[1], self.width, self.height)
@@ -364,7 +364,7 @@ class Weapon(metaclass=ABCMeta):
         self.round_vel: int = kwargs.get("round_vel", 10)
 
         self.round_death_sprite_collection_name: str = kwargs.get("round_death_sprite_collection_name", None)
-        self.round_image_path: str = kwargs.get("round_image_path", "images\Pixel SHMUP Free 1.2\projectile_1.png")
+        self.round_image_path: str = kwargs.get("round_image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
         self.max_shoot_cooldown: float = kwargs.get("max_shoot_cooldown", 0.2)
         self.shoot_cooldown: float = kwargs.get("shoot_cooldown", self.max_shoot_cooldown)
 
@@ -601,7 +601,7 @@ class Weapon4(Weapon2):
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path="images\Pixel SHMUP Free 1.2\projectile_2.png"
+                    image_path="images/Pixel SHMUP Free 1.2/projectile_2.png"
                 )
                 round1.angle = self.get_closest_enemy_angle(round1)
 
@@ -615,7 +615,7 @@ class Weapon4(Weapon2):
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path="images\Pixel SHMUP Free 1.2\projectile_2.png"
+                    image_path="images/Pixel SHMUP Free 1.2/projectile_2.png"
                 )
                 
                 self.rounds.append(round1)
@@ -646,6 +646,7 @@ class Ship(metaclass=ABCMeta):
         self.max_hit_indication_duration: float = kwargs.get("max_hit_indication_duration", 0.1)
         self.hit_indication_duration: float = 0
         self.image_hit: pg.Surface = None
+        self.hit_indication_audio_name: str = kwargs.get("hit_indication_audio_name", "")
 
         self.is_alive: bool = True
 
@@ -664,6 +665,7 @@ class Ship(metaclass=ABCMeta):
         self.death_sprite_size: list[int, int] = kwargs.get("death_sprite_size", [self.width, self.width])
         self.death_explosion_positions = [[random.randint(-self.width//2, self.width//2), random.randint(-self.height//2, self.height//2)] for _ in range(self.num_death_explosions)]
         
+        self.death_explosion_audio_name: str = kwargs.get("death_explosion_audio_name", None)
         # ship sprite
         self.angle = kwargs.get("angle", 270)
         self.image_path: str = kwargs.get("image_path", "images/player/player_ship.png")
@@ -689,9 +691,10 @@ class Ship(metaclass=ABCMeta):
         pass
 
     def take_health(self, amount: float):
-        free_audio_channel = pg.mixer.find_channel()
-        if free_audio_channel:
-            free_audio_channel.play(self.currentLevel.soundfx_collection["hitmarker_2"])
+        if self.hit_indication_audio_name:
+            free_audio_channel = pg.mixer.find_channel()
+            if free_audio_channel:
+                free_audio_channel.play(self.currentLevel.soundfx_collection[self.hit_indication_audio_name])
 
         if not self.immune:
             self.health -= amount
@@ -711,6 +714,7 @@ class Ship(metaclass=ABCMeta):
         yield
 
     def death_animation(self):
+        
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
             while self.death_sprite_frame_duration > 0:
 
@@ -740,6 +744,15 @@ class Ship(metaclass=ABCMeta):
             self.death_sprite_frame_duration = self.max_death_sprite_frame_duration
 
         self.rect = None
+        
+        print("ifeifoew")
+        if self.death_explosion_audio_name:
+            print("fienfiew")
+            free_audio_channel = pg.mixer.find_channel()
+            if free_audio_channel:
+                print("iniofnewifiew")
+                free_audio_channel.play(self.currentLevel.soundfx_collection[self.death_explosion_audio_name])
+
 
         yield   
         
