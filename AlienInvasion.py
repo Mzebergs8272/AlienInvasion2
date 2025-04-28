@@ -4,6 +4,7 @@ from abc import abstractmethod, ABCMeta
 
 # TODO: create bullet sprites
 # TODO: add sprite animation to meteorite
+# TODO: completely fix the generators and make them actually work (HARD)
 
 class Game:
     def __init__(self, **kwargs):
