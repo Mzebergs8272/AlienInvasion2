@@ -17,7 +17,9 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             angle=0,
             death_anim_duration=0.5,
             max_death_explosion_interval_time=0.15,
-            num_death_explosions=3
+            num_death_explosions=3,
+            bounce_speed=random.choice([2]),
+            bounce_height=random.choice([8, 9, 10, 11]),
         )
 
         if kwargs.get("weapon"):
@@ -134,9 +136,7 @@ class Level1(Level):
             round_vel=7, 
             rotation_speed=10, 
             damage=5, 
-            round_size=[20, 20],
-            
-            
+            round_size=[20, 20],  
                        
         )
 
@@ -144,8 +144,8 @@ class Level1(Level):
         
         # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
-            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
+            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
+            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
             create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 

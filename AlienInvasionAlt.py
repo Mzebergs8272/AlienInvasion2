@@ -121,6 +121,7 @@ class Game:
             next(self.draw_player_health_gen)
         except StopIteration: 
             self.draw_player_health_gen = self.draw_player_health()
+
        
         self.draw_active_powerups()
 
@@ -748,10 +749,15 @@ class Ship(metaclass=ABCMeta):
 
         # total interval time between each explosion
         self.max_death_explosion_interval_time: float = kwargs.get("max_death_explosion_interval_time", 0.1)
-        
+        self.death_explosion_interval_time: float = self.max_death_explosion_interval_time
+    
         self.death_sprite_collection_name: str = kwargs.get("death_sprite_collection_name", None)
         self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + self.max_death_explosion_interval_time
+        self.max_death_sprite_frame_duration: float = self.death_anim_duration / len(self.currentLevel.sprite_collections[self.death_sprite_collection_name]) 
+        self.death_sprite_frame_duration: float = self.max_death_sprite_frame_duration
+        self.death_sprite_frame_indexes: list[int] = [0] * self.num_death_explosions
         self.death_sprite_size: list[int, int] = kwargs.get("death_sprite_size", [self.width, self.width])
+        self.death_explosion_positions = [[random.randint(-self.width//2, self.width//2), random.randint(-self.height//2, self.height//2)] for _ in range(self.num_death_explosions)]
         
         self.death_explosion_audio_name: str = kwargs.get("death_explosion_audio_name", None)
         # ship sprite
@@ -813,47 +819,41 @@ class Ship(metaclass=ABCMeta):
         yield
 
     def death_animation(self):
-        death_explosion_interval_time: float = self.max_death_explosion_interval_time
-        max_death_sprite_frame_duration: float = self.death_anim_duration / len(self.currentLevel.sprite_collections[self.death_sprite_collection_name]) 
-        death_sprite_frame_duration: float = max_death_sprite_frame_duration
-        death_sprite_frame_indexes: list[int] = [0] * self.num_death_explosions
-        death_explosion_positions = [[random.randint(-self.width//2, self.width//2), random.randint(-self.height//2, self.height//2)] for _ in range(self.num_death_explosions)]
-
-        self.play_death_audio()
+        self.play_death_explosion_audio()
         
         while not self.is_alive and self.rect and self.death_anim_duration > 0:
-            while death_sprite_frame_duration > 0:
+            while self.death_sprite_frame_duration > 0:
 
                 for i in range(self.num_death_explosions, 0, -1):
-                    if death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
+                    if self.death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
 
                         self.currentLevel.parent.screen.blit(
                             pg.transform.scale(
-                                self.currentLevel.sprite_collections[self.death_sprite_collection_name][death_sprite_frame_indexes[self.num_death_explosions - i]], 
+                                self.currentLevel.sprite_collections[self.death_sprite_collection_name][self.death_sprite_frame_indexes[self.num_death_explosions - i]], 
                                 self.death_sprite_size
                             ), 
                             (
-                                self.rect.x + ((self.rect.width - self.death_sprite_size[0])//2) + death_explosion_positions[self.num_death_explosions - i][0], 
-                                self.rect.y + ((self.rect.height - self.death_sprite_size[1])//2) + death_explosion_positions[self.num_death_explosions - i][1]
+                                self.rect.x + ((self.rect.width - self.death_sprite_size[0])//2) + self.death_explosion_positions[self.num_death_explosions - i][0], 
+                                self.rect.y + ((self.rect.height - self.death_sprite_size[1])//2) + self.death_explosion_positions[self.num_death_explosions - i][1]
                             )
                         )
 
-                death_explosion_interval_time -= self.currentLevel.dt
+                self.death_explosion_interval_time -= self.currentLevel.dt
                 self.death_anim_duration -= self.currentLevel.dt
-                death_sprite_frame_duration -= self.currentLevel.dt
+                self.death_sprite_frame_duration -= self.currentLevel.dt
                 yield
 
             for i in range(self.num_death_explosions, 0, -1):
-                if death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
-                    death_sprite_frame_indexes[self.num_death_explosions - i] += 1
+                if self.death_explosion_interval_time <= self.max_death_explosion_interval_time * (i / self.num_death_explosions):
+                    self.death_sprite_frame_indexes[self.num_death_explosions - i] += 1
           
-            death_sprite_frame_duration = max_death_sprite_frame_duration
+            self.death_sprite_frame_duration = self.max_death_sprite_frame_duration
 
         self.rect = None
         
         yield 
 
-    def play_death_audio(self):
+    def play_death_explosion_audio(self):
          if self.death_explosion_audio_name:
             free_audio_channel = pg.mixer.find_channel()
             if free_audio_channel:
@@ -1171,7 +1171,7 @@ class Meteorite(Ship):
         self.cooldown: float = 0
         self.spawn_position = [-500, -500]
 
-        self.max_death_anim_duration = self.death_anim_duration
+        self.max_death_animation_duration = self.death_anim_duration
         
         self.image_path = kwargs.get("image_path", "images/meteorite.png")
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
@@ -1190,8 +1190,9 @@ class Meteorite(Ship):
         self.rect.y = random.choice([-150, self.currentLevel.parent.screen_h + 100])
         self.vel = random.randint(*self.currentLevel.meteorite_vel_range)
         self.is_alive = True
-        self.death_anim_duration = self.max_death_anim_duration
+        self.death_anim_duration = self.max_death_animation_duration
         self.death_sprite_frame_indexes = [0] * self.num_death_explosions
+        self.death_sprite_frame_duration = self.max_death_sprite_frame_duration
         self.death_sprite_size = [self.rect.width, self.rect.height]
     
         if self.rect.y > 0:
