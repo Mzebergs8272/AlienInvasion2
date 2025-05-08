@@ -6,6 +6,8 @@ from typing import Iterator
 
 # TODO: add sprite animation to meteorite
 # TODO: make move in and out animation for player, compatible for all ships
+# TODO: make powerups compatible with enemies
+# TODO: make health bar move at variable speeds
 
 
 
@@ -42,6 +44,10 @@ class Game:
 
         # iterators
         self.draw_player_health_gen: Iterator[None] = None
+        self.draw_background_gen: Iterator[None] = None
+
+        self.bg_vid_path: str = "space_background_1.mp4"
+        self.bg_vid = cv2.VideoCapture(self.bg_vid_path)
 
     def check_events(self) -> None:
         for event in pg.event.get():
@@ -63,6 +69,13 @@ class Game:
             self.check_events()
             # between-level graphics here
 
+            if not self.draw_background_gen:
+                self.draw_background_gen = self.draw_background()
+            try:
+                next(self.draw_background_gen)
+            except StopIteration:
+                self.draw_background_gen = self.draw_background()
+
             # intialises level
             # passes on attributes of previous level 
             # e.g., player health & position, active powerups
@@ -74,7 +87,9 @@ class Game:
                 if prev_level:
                     level.powerups += prev_level.active_powerups
                     level.player.health = prev_level.player.health
-                    level.player.rect.x, level.player.rect.y = pg.mouse.get_pos()
+                    level.player.rect.y = prev_level.player.rect.y
+                    level.meteorites = prev_level.meteorites
+                    # level.player.rect.x, level.player.rect.y = pg.mouse.get_pos()
 
                 level.load_sprites()
                 level.load_soundfx()
@@ -136,6 +151,19 @@ class Game:
             self.draw_player_health_gen = self.draw_player_health()
        
         self.draw_active_powerups()
+    
+    def draw_background(self):
+        while True:
+            vid_read_success, bg_vid_image = self.bg_vid.read()
+
+            if vid_read_success:
+                resize = cv2.resize(bg_vid_image, (self.screen_w, self.screen_h)) 
+                bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
+            else:
+                self.bg_vid = cv2.VideoCapture(self.bg_vid_path)
+            self.screen.blit(bg_vid_surface, (0, 0))
+
+            yield
 
                 
 class Level:
@@ -160,9 +188,6 @@ class Level:
         self.dt = 0
 
         self.keys = None
-        
-        self.bg_vid_url: str = "space_background_1.mp4"
-        self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
 
         self.powerup_queue: list[Powerup] = kwargs.get("powerup_queue", [])
         self.powerups: list[Powerup] = kwargs.get("powerups", [])
@@ -173,7 +198,7 @@ class Level:
 
         self.elapsed_time: float = 0
 
-        self.soundfx_collection: dict[str, pg.mixer.Sound] = {}
+        self.soundfx_collection: dict[str, pg.mixer.Sound] = {}       
 
     def load_sprites(self) -> None:
         for name, collection in self.sprite_collections.items():
@@ -241,27 +266,17 @@ class Level:
             except StopIteration:
                 self.player.move_out_animation_gen = self.player.move_out_animation()
         
-        if self.player.rect.x >= self.parent.screen_w:
-            self.running = False
+            if self.player.move_out_anim_finished:
+                self.running = False
 
     def handle_level_start_animations(self):
-        if self.player.rect.x < 125:
+        if not self.player.move_in_anim_finished:
             if not self.player.move_in_animation_gen:
                 self.player.move_in_animation_gen = self.player.move_in_animation()
             try:
                 next(self.player.move_in_animation_gen)
             except StopIteration:
                 self.player.move_in_animation_gen = self.player.move_in_animation()
-    
-    def draw_background(self):
-        vid_read_success, bg_vid_image = self.bg_vid.read()
-
-        if vid_read_success:
-            resize = cv2.resize(bg_vid_image, (self.parent.screen_w, self.parent.screen_h)) 
-            bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
-        else:
-            self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
-        self.parent.screen.blit(bg_vid_surface, (0, 0))
 
     def start(self) -> None:
         
@@ -271,8 +286,12 @@ class Level:
             self.check_events()
 
             # order of rendering: background > powerups > enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
-
-            self.draw_background()
+            if not self.parent.draw_background_gen:
+                self.parent.draw_background_gen = self.parent.draw_background()
+            try:
+                next(self.parent.draw_background_gen)
+            except StopIteration:
+                self.parent.draw_background_gen = self.parent.draw_background()
 
             self.handle_powerups()
 
@@ -318,17 +337,18 @@ class Level:
             if not self.enemies:
                 self.handle_enemies()
 
+            self.handle_level_start_animations()
             
             if self.player.is_alive:
-                self.handle_level_start_animations()
+            
                 self.player.draw()
-
-                if not self.player.move_to_cursor_gen:
-                    self.player.move_to_cursor_gen = self.player.move_to_cursor()
-                try:
-                    next(self.player.move_to_cursor_gen)
-                except StopIteration: 
-                    self.player.move_to_cursor_gen = self.player.move_to_cursor()
+                if self.player.move_in_anim_finished:
+                    if not self.player.move_to_cursor_gen:
+                        self.player.move_to_cursor_gen = self.player.move_to_cursor()
+                    try:
+                        next(self.player.move_to_cursor_gen)
+                    except StopIteration: 
+                        self.player.move_to_cursor_gen = self.player.move_to_cursor()
 
                 if self.is_rect_onscreen(self.player.rect):
 
@@ -770,6 +790,8 @@ class Ship(metaclass=ABCMeta):
         self.health: float = self.max_health
         self.immune: bool = kwargs.get("immune", False)
 
+        self.can_shoot: bool = True
+
         # hit indication
         self.max_hit_indication_duration: float = kwargs.get("max_hit_indication_duration", 0.1)
         self.hit_indication_duration: float = 0
@@ -909,11 +931,13 @@ class Player(Ship):
         self.move_out_animation_gen: Iterator[None] = None
         self.move_in_animation_gen: Iterator[None] = None
 
- 
+        self.move_in_anim_finished: bool = False
+        self.move_out_anim_finished: bool = True
+
     def shoot(self):
-        while True:
+        while self.can_shoot:
             self.weapon.shoot_cooldown -= self.currentLevel.dt
-            if self.currentLevel.keys[pg.K_SPACE] or pg.mouse.get_pressed()[0]:
+            if (self.currentLevel.keys[pg.K_SPACE] or pg.mouse.get_pressed()[0]):
 
                 if not self.weapon.shoot_gen:
                     self.weapon.shoot_gen = self.weapon.shoot()
@@ -923,6 +947,7 @@ class Player(Ship):
                     self.weapon.shoot_gen = self.weapon.shoot()
 
             yield
+        yield
 
     def handle_bullet_collision(self) -> None:
         for round in self.weapon.rounds:
@@ -942,7 +967,7 @@ class Player(Ship):
             self.rect = None
 
     def move_to_cursor(self):
-        while not self.move_out_animation_gen or not self.move_in_animation_gen:
+        while not self.move_out_animation_gen and self.move_in_anim_finished:
             mouse_pos = pg.mouse.get_pos()
             player_pos = [self.rect.x + self.rect.width//2, self.rect.y + self.rect.height//2]
             adj = mouse_pos[0] - player_pos[0]
@@ -962,47 +987,47 @@ class Player(Ship):
         yield
 
     def move_in_animation(self):
-
         vel = 1
+        self.can_shoot = False
 
-        while self.rect.x < 125:
-            if self.rect.x < 75:
+        while self.rect.x < 200:
+            if self.rect.x < 100:
                 vel += 0.2
             
-            if self.rect.x >= 75:
-                vel -= 0.2
+            if self.rect.x >= 100:
+                vel -= 0.
                 
             self.rect.x += vel
 
             yield
-
+        self.move_in_anim_finished = True
+        self.can_shoot = True
         yield
 
     def move_out_animation(self):
+        self.immune = True
+        self.move_out_anim_finished = False
 
         vel = -1
-        inv = -5
+        max_vel = -5
 
         while self.rect.x < self.currentLevel.parent.screen_w:
             if vel > -5:
                 self.rect.x += vel
                 vel -= 0.2
             
-            if vel <= inv:
-                if inv == -5: inv = 15
+            if vel <= max_vel:
+                if max_vel == -5: max_vel = 15
 
                 self.rect.x += vel
                 vel += 0.4
             
             yield
-        
+
+        self.immune = False
+        self.move_out_anim_finished = True
+
         yield
-
-
-
-
-
-
 
 
 
@@ -1036,7 +1061,7 @@ class StandardEnemy(Ship):
         self.move_in_animation_gen: Iterator[None] = None
 
     def shoot(self):
-        while True:
+        while self.can_shoot:
             if self.shoot_cooldown is None:
                 if self.random_shoot_cooldowns:
                     self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
@@ -1058,6 +1083,8 @@ class StandardEnemy(Ship):
                 self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
 
             yield
+        
+        yield
 
     def move_in_anim(self):
         if self.rect.x == self.spawn_position[0]:
@@ -1105,7 +1132,7 @@ class StandardEnemy(Ship):
                     enemy.handle_health()
 
 
-# TODO: make powerups compatible with enemies
+
 class Powerup:
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):
         self.currentLevel = currentLevel

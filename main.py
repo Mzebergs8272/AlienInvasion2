@@ -102,7 +102,7 @@ class Level1(Level):
             spawn_position=[-100, self.parent.screen_h//2],
             max_health=300, 
         )
-        weapon1: Weapon = Weapon4(
+        weapon1: Weapon = Weapon2(
             self, 
             parent=self.player, 
             max_shoot_cooldown=0.2, 
@@ -144,8 +144,8 @@ class Level1(Level):
         
         # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
-            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
+            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
+            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
             create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 
