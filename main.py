@@ -1,5 +1,5 @@
 from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost, Meteorite
-import random, copy
+import random
 
 def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
     fleet = []
@@ -99,10 +99,10 @@ class Level1(Level):
             parent=self,
             vel=10, 
             death_sprite_collection_name="explosion1",
-            spawn_position=[150, self.parent.screen_h//2],
+            spawn_position=[-100, self.parent.screen_h//2],
             max_health=300, 
         )
-        weapon1: Weapon = Weapon1(
+        weapon1: Weapon = Weapon4(
             self, 
             parent=self.player, 
             max_shoot_cooldown=0.2, 
@@ -144,8 +144,8 @@ class Level1(Level):
         
         # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
+            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
+            # create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
             create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 

@@ -2,10 +2,12 @@ import pygame as pg, sys, math, os, random, colorsys, cv2
 from abc import abstractmethod, ABCMeta
 from typing import Iterator
 
-#TODO: fix iterators
 
-# TODO: create bullet sprites
+
 # TODO: add sprite animation to meteorite
+# TODO: make move in and out animation for player, compatible for all ships
+
+
 
 class Game:
     def __init__(self, **kwargs):
@@ -54,23 +56,34 @@ class Game:
     def start(self) -> None:
         pg.init()
         self.load_ui_images()
+
+        prev_level: Level = None
+
         while self.running:
             self.check_events()
             # between-level graphics here
 
-            prev_level_powerups: list[Powerup] = []
-            
+            # intialises level
+            # passes on attributes of previous level 
+            # e.g., player health & position, active powerups
+ 
             if self.currentLevelIdx < len(self.levels):
                 
                 level: Level = self.levels[self.currentLevelIdx](parent=self)
-                level.powerups += prev_level_powerups
+
+                if prev_level:
+                    level.powerups += prev_level.active_powerups
+                    level.player.health = prev_level.player.health
+                    level.player.rect.x, level.player.rect.y = pg.mouse.get_pos()
+
                 level.load_sprites()
                 level.load_soundfx()
                 
                 self.currentLevel = level
+                
                 level.start()
 
-                prev_level_powerups += level.active_powerups
+                prev_level = level
                 self.currentLevelIdx += 1
                     
             pg.display.flip()
@@ -221,9 +234,37 @@ class Level:
     
     def handle_level_completion(self) -> bool:
         if not self.enemies and not self.enemy_queue:
+            if not self.player.move_out_animation_gen:
+                self.player.move_out_animation_gen = self.player.move_out_animation()
+            try:
+                next(self.player.move_out_animation_gen)
+            except StopIteration:
+                self.player.move_out_animation_gen = self.player.move_out_animation()
+        
+        if self.player.rect.x >= self.parent.screen_w:
             self.running = False
 
+    def handle_level_start_animations(self):
+        if self.player.rect.x < 125:
+            if not self.player.move_in_animation_gen:
+                self.player.move_in_animation_gen = self.player.move_in_animation()
+            try:
+                next(self.player.move_in_animation_gen)
+            except StopIteration:
+                self.player.move_in_animation_gen = self.player.move_in_animation()
+    
+    def draw_background(self):
+        vid_read_success, bg_vid_image = self.bg_vid.read()
+
+        if vid_read_success:
+            resize = cv2.resize(bg_vid_image, (self.parent.screen_w, self.parent.screen_h)) 
+            bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
+        else:
+            self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
+        self.parent.screen.blit(bg_vid_surface, (0, 0))
+
     def start(self) -> None:
+        
         while self.running:
             
             self.keys = pg.key.get_pressed()
@@ -231,14 +272,7 @@ class Level:
 
             # order of rendering: background > powerups > enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
 
-            vid_read_success, bg_vid_image = self.bg_vid.read()
-
-            if vid_read_success:
-                resize = cv2.resize(bg_vid_image, (self.parent.screen_w, self.parent.screen_h)) 
-                bg_vid_surface = pg.image.frombuffer(resize.tobytes(), resize.shape[1::-1], "BGR")
-            else:
-                self.bg_vid = cv2.VideoCapture(self.bg_vid_url)
-            self.parent.screen.blit(bg_vid_surface, (0, 0))
+            self.draw_background()
 
             self.handle_powerups()
 
@@ -284,7 +318,9 @@ class Level:
             if not self.enemies:
                 self.handle_enemies()
 
+            
             if self.player.is_alive:
+                self.handle_level_start_animations()
                 self.player.draw()
 
                 if not self.player.move_to_cursor_gen:
@@ -352,6 +388,7 @@ class Level:
             self.parent.draw_interface()
             self.handle_level_completion()
             
+            
             pg.display.update()
             self.dt = self.clock.tick(self.parent.fps) / 1000
             self.elapsed_time += self.dt
@@ -385,7 +422,7 @@ class Round:
 
         # sprite 
         self.image_path: str = kwargs.get("image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
-        if isinstance(self.parent, Weapon4): print(self.angle)
+        
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
         self.rect: pg.Rect = pg.Rect(self.spawn_position[0], self.spawn_position[1], self.width, self.height)
         
@@ -466,8 +503,7 @@ class Weapon1(Weapon):
 
     def shoot(self):
         while True:
-            if isinstance(self.parent, StandardEnemy):
-                print("fipenfp")
+      
             if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
             if self.shoot_cooldown <= 0:
                 round = Round(
@@ -677,14 +713,13 @@ class Weapon4(Weapon2):
                     if curr_enemy_dist < self.prev_enemy_dist and self.closest_enemy.is_alive or not self.closest_enemy.is_alive:
                         self.closest_enemy = enemy
                         self.prev_enemy_dist = curr_enemy_dist
-                else:
-                    self.closest_enemy = None
                         
             if self.shoot_cooldown > 0: 
                 self.shoot_cooldown -= self.currentLevel.dt
 
-            if self.shoot_cooldown <= 0 and self.closest_enemy and self.closest_enemy.is_alive:
-                
+            if self.shoot_cooldown <= 0 and self.closest_enemy and self.closest_enemy.is_alive \
+                 and ((self.parent.rect.x - 20 > enemy.rect.x and isinstance(self.parent, StandardEnemy)) or (self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x and isinstance(self.parent, Player))):
+                if isinstance(self.parent, StandardEnemy): print("player", enemy.rect.x, "enemy", self.parent.rect.x)
                 round1 = Round(
                     self.currentLevel, 
                     self,
@@ -774,6 +809,7 @@ class Ship(metaclass=ABCMeta):
         pass
 
     def draw(self) -> None:
+
         self.currentLevel.parent.screen.blit(self.image, self.rect)
 
         if self.hit_indication_duration > 0:
@@ -868,6 +904,11 @@ class Player(Ship):
         self.move_to_cursor_gen: Iterator[None] = None
 
         self.vel = kwargs.get("vel", 1)
+
+        # iterators
+        self.move_out_animation_gen: Iterator[None] = None
+        self.move_in_animation_gen: Iterator[None] = None
+
  
     def shoot(self):
         while True:
@@ -901,7 +942,7 @@ class Player(Ship):
             self.rect = None
 
     def move_to_cursor(self):
-        while True:
+        while not self.move_out_animation_gen or not self.move_in_animation_gen:
             mouse_pos = pg.mouse.get_pos()
             player_pos = [self.rect.x + self.rect.width//2, self.rect.y + self.rect.height//2]
             adj = mouse_pos[0] - player_pos[0]
@@ -918,6 +959,50 @@ class Player(Ship):
                 self.rect.y += sin * hyp * 0.35
            
             yield
+        yield
+
+    def move_in_animation(self):
+
+        vel = 1
+
+        while self.rect.x < 125:
+            if self.rect.x < 75:
+                vel += 0.2
+            
+            if self.rect.x >= 75:
+                vel -= 0.2
+                
+            self.rect.x += vel
+
+            yield
+
+        yield
+
+    def move_out_animation(self):
+
+        vel = -1
+        inv = -5
+
+        while self.rect.x < self.currentLevel.parent.screen_w:
+            if vel > -5:
+                self.rect.x += vel
+                vel -= 0.2
+            
+            if vel <= inv:
+                if inv == -5: inv = 15
+
+                self.rect.x += vel
+                vel += 0.4
+            
+            yield
+        
+        yield
+
+
+
+
+
+
 
 
 
