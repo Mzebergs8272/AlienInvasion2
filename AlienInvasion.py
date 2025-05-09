@@ -5,7 +5,6 @@ from typing import Iterator
 
 
 # TODO: add sprite animation to meteorite
-# TODO: make move in and out animation for player, compatible for all ships
 # TODO: make powerups compatible with enemies
 # TODO: make health bar move at variable speeds
 # TODO: add health bar visual for Ship class
@@ -802,10 +801,8 @@ class Ship(metaclass=ABCMeta):
         self.parent: Level = parent
         self.currentLevel: Level = currentLevel
         self.weapon: Weapon = kwargs.get("weapon", None)
-
         self.width: int = kwargs.get("width", 100)
         self.height: int = kwargs.get("height", 75)
-
         self.spawn_position: list[int, int] = kwargs.get("spawn_position", [50, 50])
 
         # health
@@ -825,10 +822,8 @@ class Ship(metaclass=ABCMeta):
 
         # death animation
         self.num_death_explosions: int = kwargs.get("num_death_explosions", 3)
-
-        # total interval time between each explosion
+        ## total interval time between each explosion
         self.max_death_explosion_interval_time: float = kwargs.get("max_death_explosion_interval_time", 0.1)
-        
         self.death_sprite_collection_name: str = kwargs.get("death_sprite_collection_name", None)
         self.death_anim_duration: float = kwargs.get("death_anim_duration", 0.5) + self.max_death_explosion_interval_time
         self.death_sprite_size: list[int, int] = kwargs.get("death_sprite_size", [self.width, self.width])
@@ -843,6 +838,14 @@ class Ship(metaclass=ABCMeta):
         # hit/damage indication
         self.image_hit_path: str = kwargs.get("image_hit_path", "images/player/player_ship_hit1.png")
         self.image_hit: pg.Surface = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
+        
+        # animation on spawn
+        self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
+        self.move_in_anim_finished: bool = False
+        self.move_in_vel: float = kwargs.get("move_in_vel", None)
+        self.move_in_offset: int = kwargs.get("move_in_offset", 900)
+        ## 0 = left, 1 = right
+        self.move_in_from: int = kwargs.get("move_in_from", 1)
 
         # iterators
         self.death_animation_gen: Iterator[None] = None
@@ -940,6 +943,39 @@ class Ship(metaclass=ABCMeta):
             if free_audio_channel:
                 free_audio_channel.play(self.currentLevel.soundfx_collection[self.death_explosion_audio_name])
      
+    def move_in_animation(self):
+        if not self.move_in_on_spawn:
+            return
+        
+        self.rect.x += self.move_in_offset
+        constant_vel = False if not self.move_in_vel else True
+        self.can_shoot = False
+
+        if self.move_in_from == 1:
+
+            while self.move_in_on_spawn and not self.move_in_anim_finished and self.rect.x > self.spawn_position[0]:
+                if not constant_vel and (self.rect.x - self.spawn_position[0]) / 50 > 0.5:
+                    self.move_in_vel = (self.rect.x - self.spawn_position[0]) / 50
+
+                self.rect.x -= self.move_in_vel
+
+                yield
+        
+        else:
+
+            while self.move_in_on_spawn and not self.move_in_anim_finished and self.rect.x < self.spawn_position[0]:
+                if not constant_vel and (self.spawn_position[0] - self.rect.x) / 50 > 0.5:
+                    self.move_in_vel = (self.spawn_position[0] - self.rect.x) / 50
+
+                self.rect.x += self.move_in_vel
+
+                yield
+        
+
+        self.move_in_anim_finished = True
+        self.can_shoot = True
+
+        yield
         
 
 class Player(Ship):
@@ -954,7 +990,6 @@ class Player(Ship):
         self.move_out_animation_gen: Iterator[None] = None
         self.move_in_animation_gen: Iterator[None] = None
 
-        self.move_in_anim_finished: bool = False
         self.move_out_anim_finished: bool = True
 
     def shoot(self):
@@ -1009,24 +1044,6 @@ class Player(Ship):
             yield
         yield
 
-    def move_in_animation(self):
-        vel = 1
-        self.can_shoot = False
-
-        while self.rect.x < 200:
-            if self.rect.x < 100:
-                vel += 0.2
-            
-            if self.rect.x >= 100:
-                vel -= 0.1
-                
-            self.rect.x += vel
-
-            yield
-        self.move_in_anim_finished = True
-        self.can_shoot = True
-        yield
-
     def move_out_animation(self):
         self.immune = True
         self.move_out_anim_finished = False
@@ -1073,11 +1090,6 @@ class StandardEnemy(Ship):
         self.curr_angle: float = 0 # to get the y ratio
         self.bounce_height: int = kwargs.get("bounce_height", 10) # radius of circle
 
-        # animation on spawn
-        self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
-        self.move_in_vel: float = kwargs.get("move_in_vel", None)
-        self.move_in_offset: int = kwargs.get("move_in_offset", 900)
-
         # hit/damage indication
         self.image_hit_path = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
         self.image_hit = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
@@ -1111,31 +1123,14 @@ class StandardEnemy(Ship):
         
         yield
 
-    def move_in_anim(self):
-        self.rect.x += self.move_in_offset
-
-        constant_vel = False if not self.move_in_vel else True
-
-        while self.move_in_on_spawn and self.rect.x > self.spawn_position[0]:
-            if not constant_vel and (self.rect.x - self.spawn_position[0]) / 50 > 0.5:
-                self.move_in_vel = (self.rect.x - self.spawn_position[0]) / 50
-
-            self.rect.x -= self.move_in_vel
-
-            yield
-
-        self.move_in_on_spawn = False
-
-        yield
-
     def update_position(self):
-        if self.move_in_on_spawn: 
+        if self.move_in_on_spawn and not self.move_in_anim_finished: 
             if not self.move_in_animation_gen:
-                self.move_in_animation_gen = self.move_in_anim()
+                self.move_in_animation_gen = self.move_in_animation()
             try:
                 next(self.move_in_animation_gen)
             except StopIteration:
-                self.move_in_animation_gen = self.move_in_anim()
+                self.move_in_animation_gen = self.move_in_animation()
 
 
         if self.bounce:

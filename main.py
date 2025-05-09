@@ -16,6 +16,7 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             angle=0,
             death_anim_duration=0.5,
             move_in_offset=kwargs.get("move_in_offset", 900),
+            move_in_from=1,
             max_death_explosion_interval_time=0.15,
             num_death_explosions=3,
             bounce_speed=random.choice([2]),
@@ -99,8 +100,10 @@ class Level1(Level):
             parent=self,
             vel=10, 
             death_sprite_collection_name="explosion1",
-            spawn_position=[-100, self.parent.screen_h//2],
+            spawn_position=[150, (self.parent.screen_h//2)-50],
             max_health=300, 
+            move_in_from=0,
+            move_in_offset=-2500
         )
         weapon1: Weapon = Weapon2(
             self, 
@@ -123,6 +126,7 @@ class Level1(Level):
             death_sprite_collection_name="explosion1",
             random_shoot_cooldowns=[1], 
             max_health=2000,
+            move_in_from=1,
             num_death_explosions=10,
             death_explosion_audio_name="big_explosion_1"
         )
