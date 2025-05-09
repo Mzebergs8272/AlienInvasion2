@@ -8,6 +8,7 @@ from typing import Iterator
 # TODO: make move in and out animation for player, compatible for all ships
 # TODO: make powerups compatible with enemies
 # TODO: make health bar move at variable speeds
+# TODO: add health bar visual for Ship class
 
 
 
@@ -25,6 +26,7 @@ class Game:
 
         self.currentLevel: Level = None
         self.currentLevelIdx: int = 0
+        self.can_start: bool = False
 
         # interface
         self.interface_h: int = kwargs.get("interface_h", 100)
@@ -45,6 +47,7 @@ class Game:
         # iterators
         self.draw_player_health_gen: Iterator[None] = None
         self.draw_background_gen: Iterator[None] = None
+        self.draw_main_menu_gen: Iterator[None] = None
 
         self.bg_vid_path: str = "space_background_1.mp4"
         self.bg_vid = cv2.VideoCapture(self.bg_vid_path)
@@ -54,6 +57,9 @@ class Game:
             if event.type == pg.QUIT:
                 pg.quit()
                 sys.exit()
+            
+            if event.type == pg.KEYDOWN and not self.can_start:
+                self.can_start = True
 
     def load_ui_images(self):
         for type, path in self.powerup_icons.items():
@@ -75,12 +81,19 @@ class Game:
                 next(self.draw_background_gen)
             except StopIteration:
                 self.draw_background_gen = self.draw_background()
+            
+            if not self.draw_main_menu_gen:
+                self.draw_main_menu_gen = self.draw_main_menu()
+            try: 
+                next(self.draw_main_menu_gen)
+            except StopIteration:
+                self.draw_main_menu_gen = self.draw_main_menu()
 
             # intialises level
             # passes on attributes of previous level 
             # e.g., player health & position, active powerups
  
-            if self.currentLevelIdx < len(self.levels):
+            if self.can_start and self.currentLevelIdx < len(self.levels):
                 
                 level: Level = self.levels[self.currentLevelIdx](parent=self)
 
@@ -89,7 +102,6 @@ class Game:
                     level.player.health = prev_level.player.health
                     level.player.rect.y = prev_level.player.rect.y
                     level.meteorites = prev_level.meteorites
-                    # level.player.rect.x, level.player.rect.y = pg.mouse.get_pos()
 
                 level.load_sprites()
                 level.load_soundfx()
@@ -165,6 +177,17 @@ class Game:
 
             yield
 
+    def draw_main_menu(self):
+        while True:
+
+            font = pg.font.Font(None, 32)
+            text = font.render('Press Any Button to Start', True, (255, 255, 255))
+            self.screen.blit(text, text.get_rect(x=self.screen_w//2 - (text.get_width()//2), y=self.screen_h//2 - (text.get_height()//2)))
+
+            yield
+                        
+
+            
                 
 class Level:
     def __init__(self, parent: Game, **kwargs):
@@ -995,7 +1018,7 @@ class Player(Ship):
                 vel += 0.2
             
             if self.rect.x >= 100:
-                vel -= 0.
+                vel -= 0.1
                 
             self.rect.x += vel
 
@@ -1007,6 +1030,7 @@ class Player(Ship):
     def move_out_animation(self):
         self.immune = True
         self.move_out_anim_finished = False
+        self.can_shoot = False
 
         vel = -1
         max_vel = -5
@@ -1026,6 +1050,7 @@ class Player(Ship):
 
         self.immune = False
         self.move_out_anim_finished = True
+        self.can_shoot = True
 
         yield
 
@@ -1050,8 +1075,8 @@ class StandardEnemy(Ship):
 
         # animation on spawn
         self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
-        self.move_in_vel: float = kwargs.get("move_in_vel", 5)
-        self.move_in_offset: int = kwargs.get("move_in_offset", 300)
+        self.move_in_vel: float = kwargs.get("move_in_vel", None)
+        self.move_in_offset: int = kwargs.get("move_in_offset", 900)
 
         # hit/damage indication
         self.image_hit_path = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
@@ -1087,13 +1112,17 @@ class StandardEnemy(Ship):
         yield
 
     def move_in_anim(self):
-        if self.rect.x == self.spawn_position[0]:
-            self.rect.x += self.move_in_offset
-        while self.rect.x > self.spawn_position[0]:
+        self.rect.x += self.move_in_offset
+
+        constant_vel = False if not self.move_in_vel else True
+
+        while self.move_in_on_spawn and self.rect.x > self.spawn_position[0]:
+            if not constant_vel and (self.rect.x - self.spawn_position[0]) / 50 > 0.5:
+                self.move_in_vel = (self.rect.x - self.spawn_position[0]) / 50
+
             self.rect.x -= self.move_in_vel
-        
-            if self.rect.x > self.spawn_position[0]:
-                yield
+
+            yield
 
         self.move_in_on_spawn = False
 
@@ -1123,7 +1152,6 @@ class StandardEnemy(Ship):
             self.rect = None
 
     def handle_bullet_collision(self) -> None:
-
         for enemy in [self.currentLevel.player] + self.currentLevel.meteorites:
             for round in self.weapon.rounds:
                 if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
@@ -1295,8 +1323,9 @@ class Meteorite(Ship):
     def reset(self):
         self.cooldown = random.randint(*self.currentLevel.meteorite_cooldown_range)
         self.damage = random.randint(*self.currentLevel.meteorite_damage_range)
-        self.health = self.max_health = random.randint(*self.currentLevel.meteorite_health_range)
         self.rect.width = self.rect.height = random.randint(*self.currentLevel.meteorite_size_range)
+        self.health = self.max_health = self.rect.width * 20
+
         self.image = pg.transform.scale(self.image, (self.rect.width, self.rect.height))
         self.rect.x = random.randint(*self.currentLevel.meteorite_spawn_x_position_range)
         self.rect.y = random.choice([-150, self.currentLevel.parent.screen_h + 100])

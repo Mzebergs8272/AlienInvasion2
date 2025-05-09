@@ -13,9 +13,9 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             width=kwargs.get("width", 100),
             height=kwargs.get("height", 75),
             random_shoot_cooldowns=kwargs.get("random_shoot_cooldowns", [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3]),
-            move_in_vel=10,
             angle=0,
             death_anim_duration=0.5,
+            move_in_offset=kwargs.get("move_in_offset", 900),
             max_death_explosion_interval_time=0.15,
             num_death_explosions=3,
             bounce_speed=random.choice([2]),
@@ -119,7 +119,7 @@ class Level1(Level):
             parent=self, 
             width=150, 
             height=150, 
-            spawn_position=[1100, 250], 
+            spawn_position=[1000, 250], 
             death_sprite_collection_name="explosion1",
             random_shoot_cooldowns=[1], 
             max_health=2000,
@@ -144,8 +144,8 @@ class Level1(Level):
         
         # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100) + create_fleet(self, 7, 950, -75, 100) + create_fleet(self, 7, 800, -75, 100), 
-            create_fleet(self, 7, 1250, -75, 100) + create_fleet(self, 7, 1100, -75, 100), 
+            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7], move_in_offset=2500) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7], move_in_offset=1800) + create_fleet(self, 7, 950, -75, 100, round_size=[25, 7], move_in_offset=1500) + create_fleet(self, 7, 800, -75, 100, round_size=[25, 7], move_in_offset=1200), 
+            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7]), 
             create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 
@@ -176,6 +176,7 @@ class Level1(Level):
             meteorite2,
             meteorite3
         ]
+
 
 
 class Level2(Level1):
