@@ -129,7 +129,7 @@ class Game:
                 
             if self.interface_health_bar.width < health_width:
                 self.interface_health_bar.width += 1
-           
+            
             pg.draw.rect(self.screen, self.interface_health_bar_color or list((i*255 for i in hls)), self.interface_health_bar)
 
             yield
@@ -186,7 +186,6 @@ class Game:
             yield
                         
 
-            
                 
 class Level:
     def __init__(self, parent: Game, **kwargs):
@@ -364,6 +363,7 @@ class Level:
             if self.player.is_alive:
             
                 self.player.draw()
+
                 if self.player.move_in_anim_finished:
                     if not self.player.move_to_cursor_gen:
                         self.player.move_to_cursor_gen = self.player.move_to_cursor()
@@ -371,6 +371,14 @@ class Level:
                         next(self.player.move_to_cursor_gen)
                     except StopIteration: 
                         self.player.move_to_cursor_gen = self.player.move_to_cursor()
+                
+                if self.player.draw_health:
+                    if not self.player.draw_health_bar_gen:
+                        self.player.draw_health_bar_gen = self.player.draw_health_bar()
+                    try:
+                        next(self.player.draw_health_bar_gen)
+                    except StopIteration:
+                        self.player.draw_health_bar_gen = self.player.draw_health_bar()
 
                 if self.is_rect_onscreen(self.player.rect):
 
@@ -416,6 +424,14 @@ class Level:
                         next(enemy.weapon.update_rounds_gen)
                     except StopIteration: 
                         enemy.weapon.update_rounds_gen = enemy.weapon.update_rounds()
+                    
+                    if enemy.draw_health:
+                        if not enemy.draw_health_bar_gen:
+                            enemy.draw_health_bar_gen = enemy.draw_health_bar()
+                        try:
+                            next(enemy.draw_health_bar_gen)
+                        except StopIteration:
+                            enemy.draw_health_bar_gen = enemy.draw_health_bar()
 
                     enemy.handle_bullet_collision()
                 else:
@@ -429,7 +445,6 @@ class Level:
         
             self.parent.draw_interface()
             self.handle_level_completion()
-            
             
             pg.display.update()
             self.dt = self.clock.tick(self.parent.fps) / 1000
@@ -474,7 +489,7 @@ class Round:
 
     def draw(self):
         if self.angle != self.prev_angle:
-            self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
+            self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), -self.angle), (self.width, self.height))
             self.prev_angle = self.angle
         self.currentLevel.parent.screen.blit(self.image, self.rect)
     
@@ -557,7 +572,8 @@ class Weapon1(Weapon):
                     width=self.round_size[0],
                     height=self.round_size[1],
                     color=self.round_color,
-                    image_path=self.round_image_path
+                    vel=self.round_vel,
+                    image_path=self.round_image_path,
                 )
                 self.rounds.append(round)
                 self.shoot_cooldown = self.max_shoot_cooldown
@@ -624,7 +640,10 @@ class Weapon2(Weapon1):
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
-                    color=self.round_color
+                    color=self.round_color,
+                    image_path=self.round_image_path,
+                    vel=self.round_vel,
+                    
                 )
                 round2 = Round(
                     self.currentLevel,
@@ -635,7 +654,8 @@ class Weapon2(Weapon1):
                     width=self.round_size[0],
                     height=self.round_size[1],
                     color=self.round_color,
-                    image_path=self.round_image_path
+                    image_path=self.round_image_path,
+                    vel=self.round_vel
 
                 )
             
@@ -725,6 +745,53 @@ class Weapon4(Weapon2):
         self.closest_enemy: Ship = None
         self.prev_enemy_dist: float = float("inf")
 
+        self.angle = 0
+        self.offset = 20
+        self.osc_speed = 5
+
+    def update_rounds(self):
+
+        while self.rounds:
+
+            self.angle += self.osc_speed
+
+            self.rounds = [r for r in self.rounds if r.rect is not None]
+           
+            for round in self.rounds:
+
+                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect):
+                    round.draw()
+                    
+                    upwards = math.sin(math.radians(round.angle))
+                    right = math.cos(math.radians(round.angle))
+
+                    round.rect.x += right * round.vel
+                    round.rect.y += upwards * round.vel
+
+                elif not self.parent.is_alive:
+                    round.is_alive = False
+
+                    if not round.death_animation_gen:
+                        round.death_animation_gen = round.death_animation()
+                    try:
+                        next(round.death_animation_gen)
+                    except StopIteration: 
+                        round.death_animation_gen = round.death_animation()
+                
+                else:
+                    round.is_alive = False
+
+                    if not round.death_animation_gen:
+                        round.death_animation_gen = round.death_animation()
+                    try:
+                        next(round.death_animation_gen)
+                    except StopIteration: 
+                        round.death_animation_gen = round.death_animation()
+                
+            yield
+
+        yield
+
     def get_closest_enemy_angle(self, round: Round) -> float:
         if not self.closest_enemy or not self.closest_enemy.is_alive: 
             return self.shoot_angle
@@ -760,37 +827,88 @@ class Weapon4(Weapon2):
                 self.shoot_cooldown -= self.currentLevel.dt
 
             if self.shoot_cooldown <= 0 and self.closest_enemy and self.closest_enemy.is_alive \
-                 and ((self.parent.rect.x - 20 > enemy.rect.x and isinstance(self.parent, StandardEnemy)) or (self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x and isinstance(self.parent, Player))):
-                if isinstance(self.parent, StandardEnemy): print("player", enemy.rect.x, "enemy", self.parent.rect.x)
+                and ((self.parent.rect.x - 20 > enemy.rect.x and isinstance(self.parent, StandardEnemy)) or (self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x and isinstance(self.parent, Player))):
+                
                 round1 = Round(
                     self.currentLevel, 
                     self,
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) + self.bullet_offset_y],
+                    spawn_position=
+                    [
+                        (self.parent.rect.x + self.parent.rect.width) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
+                        ((self.parent.rect.y + self.parent.rect.height//2) + self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
+                    ],
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path="images/Pixel SHMUP Free 1.2/projectile_2.png"
+                    image_path=self.round_image_path,
                 )
                 round1.angle = self.get_closest_enemy_angle(round1)
 
                 round2 = Round(
                     self.currentLevel,
                     self, 
-                    angle=round1.angle,
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) - self.bullet_offset_y], 
+                    spawn_position=
+                    [
+                        (self.parent.rect.x + self.parent.rect.width) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
+                        ((self.parent.rect.y + self.parent.rect.height//2) - self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
+                    ], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path="images/Pixel SHMUP Free 1.2/projectile_2.png"
+                    image_path=self.round_image_path,
                 )
+
+                round2.angle = self.get_closest_enemy_angle(round1)
                 
                 self.rounds.append(round1)
                 self.rounds.append(round2)
                 self.shoot_cooldown = self.max_shoot_cooldown
+
+            yield
+
+
+
+class Weapon5(Weapon1):
+    def __init__(self, currentLevel: Level, parent: object=None, **kwargs):
+        super().__init__(currentLevel, parent, **kwargs)
+
+        self.num_rounds: int = kwargs.get("num_rounds", 20)
+        self.shoot_radius: int = kwargs.get("shoot_radius", 50)
+
+        
+    
+    def shoot(self):
+        alt_angle = 0
+        while True:
+            
+            if self.shoot_cooldown > 0: self.shoot_cooldown -= self.currentLevel.dt
+            if self.shoot_cooldown <= 0:
+
+                for i in range(self.num_rounds):
+                    round = Round(
+                        self.currentLevel, 
+                        self, 
+                        angle=360 / self.num_rounds * (i+1) + alt_angle, 
+                        spawn_position=[(self.parent.rect.x + self.parent.rect.width//2) + (math.sin(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius), (self.parent.rect.y + self.parent.rect.height//2) + (math.cos(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius)], 
+
+                        # spawn_position=[(self.parent.rect.x + self.parent.rect.width//2) + (math.cos((360 / self.num_rounds) * (i+1)) * self.shoot_radius), (self.parent.rect.y + self.parent.rect.height//2) + (math.sin((360 / self.num_rounds) * (i+1)) * self.shoot_radius)], 
+                        death_sprite_collection_name=self.round_death_sprite_collection_name,
+                        width=self.round_size[0],
+                        height=self.round_size[1],
+                        color=self.round_color,
+                        vel=self.round_vel,
+                        image_path=self.round_image_path,
+
+                    )
+
+                    self.rounds.append(round)
+                
+                self.shoot_cooldown = self.max_shoot_cooldown
+                alt_angle += 360 / self.num_rounds / 4
 
             yield
 
@@ -809,6 +927,7 @@ class Ship(metaclass=ABCMeta):
         self.max_health: float = kwargs.get("max_health", 100)
         self.health: float = self.max_health
         self.immune: bool = kwargs.get("immune", False)
+        self.draw_health: bool = kwargs.get("draw_health", False)
 
         self.can_shoot: bool = True
 
@@ -816,7 +935,7 @@ class Ship(metaclass=ABCMeta):
         self.max_hit_indication_duration: float = kwargs.get("max_hit_indication_duration", 0.1)
         self.hit_indication_duration: float = 0
         self.image_hit: pg.Surface = None
-        self.hit_indication_audio_name: str = kwargs.get("hit_indication_audio_name", "")
+        self.hit_indication_audio_name: str = kwargs.get("hit_indication_audio_name", None)
 
         self.is_alive: bool = True
 
@@ -851,6 +970,7 @@ class Ship(metaclass=ABCMeta):
         self.death_animation_gen: Iterator[None] = None
         self.shoot_gen: Iterator[None] = None
         self.hit_indication_animation_gen: Iterator[None] = None
+        self.draw_health_bar_gen: Iterator[None] = None
 
     @abstractmethod
     def shoot(self, angle: int) -> None:
@@ -970,13 +1090,30 @@ class Ship(metaclass=ABCMeta):
                 self.rect.x += self.move_in_vel
 
                 yield
-        
 
         self.move_in_anim_finished = True
         self.can_shoot = True
 
         yield
-        
+    
+    def draw_health_bar(self):
+
+        health_bar: pg.Rect = pg.Rect(self.rect.x, self.rect.y - self.rect.height - 20, self.width, 5)
+
+        while self.health > 0:
+            health_bar.x = self.rect.x
+            health_bar.y = self.rect.y - 25
+ 
+            hls = colorsys.hls_to_rgb((health_bar.width / self.width * 100)/360, 0.5, 1)
+            
+            health_bar.width = self.health / self.max_health * self.width
+           
+            pg.draw.rect(self.currentLevel.parent.screen, list((i*255 for i in hls)), health_bar)
+
+            yield
+        yield
+
+
 
 class Player(Ship):
     def __init__(self, currentLevel: Level, parent: Level, **kwargs):

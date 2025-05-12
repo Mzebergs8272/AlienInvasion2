@@ -1,4 +1,4 @@
-from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost, Meteorite
+from AlienInvasion import Game, Level, Ship, Player, Weapon, Weapon1, Weapon2, Weapon3, Weapon4, Weapon5, StandardEnemy, PowerupWeapon, PowerupHealth, PowerupShield, PowerupDamageBoost, Meteorite
 import random
 
 def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: int, **kwargs) -> list[StandardEnemy]:
@@ -21,6 +21,8 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             num_death_explosions=3,
             bounce_speed=random.choice([2]),
             bounce_height=random.choice([8, 9, 10, 11]),
+            # hit_indication_audio_name="hitmarker_2"
+            draw_health=True
         )
 
         if kwargs.get("weapon"):
@@ -53,7 +55,7 @@ class Level1(Level):
     def __init__(self, parent: Game, **kwargs):
         super().__init__(parent, **kwargs)
         self.soundfx_collection = {
-            "hitmarker_2": "sounds/hitmarker_4.wav",
+            "hitmarker_2": "sounds/click_1.wav",
             "big_explosion_1": "sounds/big_explosion_1.wav",
         }
         self.sprite_collections = {
@@ -103,16 +105,19 @@ class Level1(Level):
             spawn_position=[150, (self.parent.screen_h//2)-50],
             max_health=300, 
             move_in_from=0,
-            move_in_offset=-2500
+            move_in_offset=-2500,
+            
         )
-        weapon1: Weapon = Weapon2(
+        weapon1: Weapon = Weapon4(
             self, 
             parent=self.player, 
             max_shoot_cooldown=0.2, 
             round_death_sprite_collection_name="explosion1", 
-            damage=100,
+            damage=0,
             round_size=[25, 7],
-            round_angle=90
+            round_angle=90,
+           
+            # round_vel=1
         )
     
         self.player.weapon = weapon1
@@ -128,17 +133,20 @@ class Level1(Level):
             max_health=2000,
             move_in_from=1,
             num_death_explosions=10,
-            death_explosion_audio_name="big_explosion_1"
+            death_explosion_audio_name="big_explosion_1",
+            draw_health=True,
+            # hit_indication_audio_name="hitmarker_2"
         )
 
-        big_enemy_weapon = Weapon4(
+        big_enemy_weapon = Weapon5(
             self, 
             parent=big_enemy, 
             round_death_sprite_collection_name="explosion1", 
+            round_image_path="images/fireball.png",
             max_shoot_cooldown=0, 
             shoot_cooldown=0, 
-            round_vel=7, 
-            rotation_speed=10, 
+            round_vel=10, 
+            # rotation_speed=10, 
             damage=5, 
             round_size=[20, 20],  
                        
@@ -146,11 +154,10 @@ class Level1(Level):
 
         big_enemy.weapon = big_enemy_weapon
         
-        # occassional freezing is linked to big_enemy, maybe
         self.enemy_queue = [
-            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7], move_in_offset=2500) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7], move_in_offset=1800) + create_fleet(self, 7, 950, -75, 100, round_size=[25, 7], move_in_offset=1500) + create_fleet(self, 7, 800, -75, 100, round_size=[25, 7], move_in_offset=1200), 
-            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7]), 
-            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
+            # create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7], move_in_offset=2500) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7], move_in_offset=1800) + create_fleet(self, 7, 950, -75, 100, round_size=[25, 7], move_in_offset=1500) + create_fleet(self, 7, 800, -75, 100, round_size=[25, 7], move_in_offset=1200), 
+            # create_fleet(self, 1, 1250, -75, 100, round_size=[25, 7]) #+ create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7]), 
+            create_fleet(self, 7, 2000, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 
         self.powerup_cooldown_range = [5, 30]
