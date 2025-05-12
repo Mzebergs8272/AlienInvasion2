@@ -22,7 +22,8 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             bounce_speed=random.choice([2]),
             bounce_height=random.choice([8, 9, 10, 11]),
             # hit_indication_audio_name="hitmarker_2"
-            draw_health=True
+            draw_health=True,
+            
         )
 
         if kwargs.get("weapon"):
@@ -38,6 +39,7 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
         enemy_weapon.round_death_sprite_collection_name="explosion1"
         enemy_weapon.shoot_angle = 180
         enemy_weapon.round_image_path = "images/Pixel SHMUP Free 1.2/projectile_3.png"
+        enemy_weapon.round_spawn_offset = [0, enemy.rect.height//2]
 
         fleet.append(enemy)
         
@@ -108,14 +110,15 @@ class Level1(Level):
             move_in_offset=-2500,
             
         )
-        weapon1: Weapon = Weapon4(
+        weapon1: Weapon = Weapon2(
             self, 
             parent=self.player, 
             max_shoot_cooldown=0.2, 
             round_death_sprite_collection_name="explosion1", 
-            damage=0,
+            damage=15,
             round_size=[25, 7],
             round_angle=90,
+            round_spawn_offset=[self.player.rect.width, self.player.rect.height//2]
            
             # round_vel=1
         )
@@ -138,7 +141,7 @@ class Level1(Level):
             # hit_indication_audio_name="hitmarker_2"
         )
 
-        big_enemy_weapon = Weapon5(
+        big_enemy_weapon = Weapon2(
             self, 
             parent=big_enemy, 
             round_death_sprite_collection_name="explosion1", 
@@ -148,16 +151,17 @@ class Level1(Level):
             round_vel=10, 
             # rotation_speed=10, 
             damage=5, 
+            shoot_angle=180,
             round_size=[20, 20],  
-                       
+            round_spawn_offset=[0, big_enemy.rect.height//2]                       
         )
 
         big_enemy.weapon = big_enemy_weapon
         
         self.enemy_queue = [
             # create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7], move_in_offset=2500) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7], move_in_offset=1800) + create_fleet(self, 7, 950, -75, 100, round_size=[25, 7], move_in_offset=1500) + create_fleet(self, 7, 800, -75, 100, round_size=[25, 7], move_in_offset=1200), 
-            # create_fleet(self, 1, 1250, -75, 100, round_size=[25, 7]) #+ create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7]), 
-            create_fleet(self, 7, 2000, -75, 100, round_size=[25, 7]) + [big_enemy], 
+            # create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + create_fleet(self, 7, 1100, -75, 100, round_size=[25, 7]), 
+            create_fleet(self, 7, 1250, -75, 100, round_size=[25, 7]) + [big_enemy], 
                             ]
 
         self.powerup_cooldown_range = [5, 30]
@@ -193,7 +197,6 @@ class Level1(Level):
 class Level2(Level1):
     def __init__(self, parent):
         super().__init__(parent)
-
 
 
 

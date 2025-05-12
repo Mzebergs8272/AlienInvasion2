@@ -300,7 +300,6 @@ class Level:
                 self.player.move_in_animation_gen = self.player.move_in_animation()
 
     def start(self) -> None:
-        
         while self.running:
             
             self.keys = pg.key.get_pressed()
@@ -346,17 +345,19 @@ class Level:
                         meteorite.death_animation_gen = meteorite.death_animation()
             
             # iterate through lists in reverse to iterate through every item
-            for i in range(len(self.enemies)-1, -1, -1):
-                enemy = self.enemies[i]
-                
-                if enemy.is_alive:
-                    enemy.update_position()
-                    enemy.draw()
-                elif not enemy.rect:
-                    self.enemies.remove(enemy)
-            
+           
             if not self.enemies:
                 self.handle_enemies()
+
+            for i in range(len(self.enemies)-1, -1, -1):
+                enemy = self.enemies[i]
+            
+                if enemy.is_alive:
+                    enemy.update_position()
+                    
+                    enemy.draw()
+                elif not enemy.rect and (enemy.weapon and not enemy.weapon.rounds):
+                    self.enemies.remove(enemy)
 
             self.handle_level_start_animations()
             
@@ -418,13 +419,6 @@ class Level:
                     except StopIteration: 
                         enemy.shoot_gen = enemy.shoot()
                     
-                    if not enemy.weapon.update_rounds_gen:
-                        enemy.weapon.update_rounds_gen = enemy.weapon.update_rounds()
-                    try:
-                        next(enemy.weapon.update_rounds_gen)
-                    except StopIteration: 
-                        enemy.weapon.update_rounds_gen = enemy.weapon.update_rounds()
-                    
                     if enemy.draw_health:
                         if not enemy.draw_health_bar_gen:
                             enemy.draw_health_bar_gen = enemy.draw_health_bar()
@@ -442,6 +436,13 @@ class Level:
                         next(enemy.death_animation_gen)
                     except StopIteration: 
                         enemy.death_animation_gen = enemy.death_animation()
+                
+                if not enemy.weapon.update_rounds_gen:
+                        enemy.weapon.update_rounds_gen = enemy.weapon.update_rounds()
+                try:
+                    next(enemy.weapon.update_rounds_gen)
+                except StopIteration: 
+                    enemy.weapon.update_rounds_gen = enemy.weapon.update_rounds()
         
             self.parent.draw_interface()
             self.handle_level_completion()
@@ -485,7 +486,6 @@ class Round:
         
         # iterators
         self.death_animation_gen: Iterator[None] = None
-
 
     def draw(self):
         if self.angle != self.prev_angle:
@@ -536,6 +536,7 @@ class Weapon(metaclass=ABCMeta):
         self.round_image_path: str = kwargs.get("round_image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
         self.max_shoot_cooldown: float = kwargs.get("max_shoot_cooldown", 0.2)
         self.shoot_cooldown: float = kwargs.get("shoot_cooldown", self.max_shoot_cooldown)
+        self.round_spawn_offset: tuple[int, int] = kwargs.get("round_spawn_offset", None)
 
         self.shoot_angle: float = kwargs.get("shoot_angle", 0)
 
@@ -567,7 +568,7 @@ class Weapon1(Weapon):
                     self.currentLevel, 
                     self, 
                     angle=self.shoot_angle, 
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, self.parent.rect.y + self.parent.rect.height//2], 
+                    spawn_position=[self.parent.rect.x + self.round_spawn_offset[0], self.parent.rect.y + self.round_spawn_offset[1]], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
@@ -636,7 +637,7 @@ class Weapon2(Weapon1):
                     self.currentLevel, 
                     self, 
                     angle=self.shoot_angle, 
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) + self.bullet_offset_y], 
+                    spawn_position=[self.parent.rect.x + self.round_spawn_offset[0], self.parent.rect.y + self.round_spawn_offset[1] - self.bullet_offset_y], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
@@ -649,7 +650,7 @@ class Weapon2(Weapon1):
                     self.currentLevel,
                     self, 
                     angle=self.shoot_angle,
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) - self.bullet_offset_y], 
+                    spawn_position=[self.parent.rect.x + self.round_spawn_offset[0], self.parent.rect.y + self.round_spawn_offset[1] + self.bullet_offset_y], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
@@ -708,7 +709,7 @@ class Weapon3(Weapon2):
                     self.currentLevel, 
                     self, 
                     angle=self.curr_round_angle, 
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) + self.bullet_offset_y], 
+                    spawn_position=[self.parent.rect.x + self.round_spawn_offset[0], self.parent.rect.y + self.round_spawn_offset[1] - self.bullet_offset_y], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
@@ -721,7 +722,7 @@ class Weapon3(Weapon2):
                     self.currentLevel, 
                     self, 
                     angle=self.curr_round_angle, 
-                    spawn_position=[self.parent.rect.x + self.parent.rect.width, (self.parent.rect.y + self.parent.rect.height//2) - self.bullet_offset_y], 
+                    spawn_position=[self.parent.rect.x + self.round_spawn_offset[0], self.parent.rect.y + self.round_spawn_offset[1] + self.bullet_offset_y], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
                     height=self.round_size[1],
@@ -834,8 +835,8 @@ class Weapon4(Weapon2):
                     self,
                     spawn_position=
                     [
-                        (self.parent.rect.x + self.parent.rect.width) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
-                        ((self.parent.rect.y + self.parent.rect.height//2) + self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
+                        (self.parent.rect.x + self.round_spawn_offset[0]) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
+                        (self.parent.rect.y + self.round_spawn_offset[1] - self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
                     ],
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
@@ -851,8 +852,8 @@ class Weapon4(Weapon2):
                     self, 
                     spawn_position=
                     [
-                        (self.parent.rect.x + self.parent.rect.width) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
-                        ((self.parent.rect.y + self.parent.rect.height//2) - self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
+                        (self.parent.rect.x + self.round_spawn_offset[0]) + (self.offset * (1-math.cos(math.radians(self.angle)))), 
+                        (self.parent.rect.y + self.round_spawn_offset[1] + self.bullet_offset_y) + (self.offset * (1-math.sin(math.radians(self.angle))))
                     ], 
                     death_sprite_collection_name=self.round_death_sprite_collection_name,
                     width=self.round_size[0],
@@ -879,8 +880,6 @@ class Weapon5(Weapon1):
         self.num_rounds: int = kwargs.get("num_rounds", 20)
         self.shoot_radius: int = kwargs.get("shoot_radius", 50)
 
-        
-    
     def shoot(self):
         alt_angle = 0
         while True:
@@ -893,9 +892,11 @@ class Weapon5(Weapon1):
                         self.currentLevel, 
                         self, 
                         angle=360 / self.num_rounds * (i+1) + alt_angle, 
-                        spawn_position=[(self.parent.rect.x + self.parent.rect.width//2) + (math.sin(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius), (self.parent.rect.y + self.parent.rect.height//2) + (math.cos(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius)], 
-
-                        # spawn_position=[(self.parent.rect.x + self.parent.rect.width//2) + (math.cos((360 / self.num_rounds) * (i+1)) * self.shoot_radius), (self.parent.rect.y + self.parent.rect.height//2) + (math.sin((360 / self.num_rounds) * (i+1)) * self.shoot_radius)], 
+                        spawn_position=
+                        [
+                            (self.parent.rect.x + self.parent.rect.width//2) + (math.cos(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius), 
+                            (self.parent.rect.y + self.parent.rect.height//2) + (math.sin(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius)
+                        ], 
                         death_sprite_collection_name=self.round_death_sprite_collection_name,
                         width=self.round_size[0],
                         height=self.round_size[1],
@@ -1345,6 +1346,8 @@ class PowerupWeapon(Powerup):
     def effect(self):
         self.currentLevel.player.weapon = self.weapon
         self.weapon.parent = self.currentLevel.player
+        self.weapon.round_spawn_offset = [self.weapon.parent.rect.width, self.weapon.parent.rect.height//2]
+
         self.finished = True 
 
 
