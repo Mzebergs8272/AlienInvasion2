@@ -8,6 +8,7 @@ from typing import Iterator
 # TODO: make powerups compatible with enemies
 # TODO: make health bar move at variable speeds
 # TODO: add health bar visual for Ship class
+# TODO: fix occasional freezing
 
 
 
@@ -20,6 +21,7 @@ class Game:
         self.screen: pg.Surface = pg.display.set_mode((self.screen_w, self.screen_h))
         self.fps: int = kwargs.get("fps", 60)
         self.clock: pg.time.Clock = pg.time.Clock()
+        self.dt: float = 0
 
         pg.display.set_caption("Alien Invasion 2")
 
@@ -43,10 +45,14 @@ class Game:
         self.powerup_bar_max_w: int = kwargs.get("powerup_bar_max_w", 100)
         self.powerup_bar_h: int = kwargs.get("powerup_bar_h", 25)
 
+        self.running_level_interlude: bool = False
+        
         # iterators
         self.draw_player_health_gen: Iterator[None] = None
         self.draw_background_gen: Iterator[None] = None
         self.draw_main_menu_gen: Iterator[None] = None
+        self.run_levels_gen: Iterator[None] = None
+        self.level_interlude_gen: Iterator[None] = None
 
         self.bg_vid_path: str = "space_background_1.mp4"
         self.bg_vid = cv2.VideoCapture(self.bg_vid_path)
@@ -57,43 +63,22 @@ class Game:
                 pg.quit()
                 sys.exit()
             
-            if event.type == pg.KEYDOWN and not self.can_start:
+            if (event.type == pg.KEYDOWN or event.type == pg.MOUSEBUTTONDOWN) and not self.can_start:
                 self.can_start = True
+                self.running_level_interlude = True
 
     def load_ui_images(self):
         for type, path in self.powerup_icons.items():
             self.powerup_icons[type] = pg.transform.scale(pg.image.load(path), (self.powerup_bar_h, self.powerup_bar_h))
 
-    def start(self) -> None:
-        pg.init()
-        self.load_ui_images()
-
+    # intialises level
+    # passes on attributes of previous level 
+    # e.g., player health & position, active powerups
+    def run_levels(self):
         prev_level: Level = None
-
-        while self.running:
-            self.check_events()
-            # between-level graphics here
-
-            if not self.draw_background_gen:
-                self.draw_background_gen = self.draw_background()
-            try:
-                next(self.draw_background_gen)
-            except StopIteration:
-                self.draw_background_gen = self.draw_background()
-            
-            if not self.draw_main_menu_gen:
-                self.draw_main_menu_gen = self.draw_main_menu()
-            try: 
-                next(self.draw_main_menu_gen)
-            except StopIteration:
-                self.draw_main_menu_gen = self.draw_main_menu()
-
-            # intialises level
-            # passes on attributes of previous level 
-            # e.g., player health & position, active powerups
- 
-            if self.can_start and self.currentLevelIdx < len(self.levels):
-                
+        while self.currentLevelIdx < len(self.levels):
+            if self.can_start:
+                    
                 level: Level = self.levels[self.currentLevelIdx](parent=self)
 
                 if prev_level:
@@ -104,16 +89,96 @@ class Game:
 
                 level.load_sprites()
                 level.load_soundfx()
-                
+              
                 self.currentLevel = level
                 
                 level.start()
 
                 prev_level = level
                 self.currentLevelIdx += 1
-                    
+                self.running_level_interlude = True
+
+            yield
+        
+        yield
+
+    def level_interlude(self):
+        vel = 2
+        curr_angle = 180
+
+        font = pg.font.Font(None, 70)
+        text: pg.Surface = font.render(f"Level {self.currentLevelIdx+1}", True, (255, 255, 255))
+
+        text_rect = text.get_rect()
+        text_rect.x = -text_rect.width
+        text_rect.y = self.screen_h // 2 - text_rect.height // 2
+        
+        while text_rect.x <= self.screen_w:
+          
+            text_rect.x += vel
+
+            if curr_angle > 0:
+                text_rect.x = math.cos(math.radians(curr_angle)) * self.screen_w // 2 - text_rect.width // 2
+                curr_angle -= vel
+                
+                # if vel is larger than 0 and text_rect has went through 6.5/16 or 40.625% of the screen horizontally
+                if vel - 0.1 > 0 and self.screen_w // 16 * 6.5 <= text_rect.x <= self.screen_w // 2:
+                    # decrease vel
+                    vel -= 0.1
+            elif curr_angle <= 0:
+                # if text has went half way through screen, invert ratio to make text continue going right with negative curr_angle
+                text_rect.x = self.screen_w - math.cos(math.radians(curr_angle)) * self.screen_w // 2 - text_rect.width // 2
+                curr_angle -= vel
+                vel += 0.1
+
+            self.screen.blit(text, text_rect)
+            yield
+        
+
+        self.running_level_interlude = False
+        yield
+
+    def start(self) -> None:
+        pg.init()
+        self.load_ui_images()
+
+        while self.running:
+            self.dt = self.clock.tick(self.fps) / 1000
+            self.check_events()
+            # between-level graphics here
+
+            if not self.draw_background_gen:
+                self.draw_background_gen = self.draw_background()
+            try:
+                next(self.draw_background_gen)
+            except StopIteration:
+                self.draw_background_gen = self.draw_background()
+
+            if self.can_start:
+                if not self.level_interlude_gen:
+                    self.level_interlude_gen = self.level_interlude()
+                try:
+                    next(self.level_interlude_gen)
+                except StopIteration:
+                    self.level_interlude_gen = self.level_interlude()
+            
+            if not self.running_level_interlude:
+                if not self.run_levels_gen:
+                    self.run_levels_gen = self.run_levels()
+                try:
+                    next(self.run_levels_gen)
+                except StopIteration:
+                    self.run_levels_gen = self.run_levels()
+
+            if not self.can_start:
+                if not self.draw_main_menu_gen:
+                    self.draw_main_menu_gen = self.draw_main_menu()
+                try:
+                    next(self.draw_main_menu_gen)
+                except StopIteration:
+                    self.draw_main_menu_gen = self.draw_main_menu()
+            
             pg.display.flip()
-            self.clock.tick(self.fps)
     
     def draw_player_health(self):
 
@@ -196,6 +261,13 @@ class Level:
         self.enemy_queue: list[list[StandardEnemy]] = kwargs.get("enemy_queue", [])
         self.enemies: list[StandardEnemy] = kwargs.get("enemies", [])
 
+        self.clock = pg.time.Clock()
+        self.dt = 0
+        self.elapsed_time: float = 0
+
+        self.keys = None
+
+        # meteorite config
         self.meteorites: list[Meteorite] = kwargs.get("meteorites", [])
         self.meteorite_spawn_x_position_range: list[int, int] = kwargs.get("meteorite_spawn_x_position_range", [])
         # self.meteorite_angle_range: list[int, int] = kwargs.get("meteorite_angle_range", [])
@@ -205,19 +277,13 @@ class Level:
         self.meteorite_damage_range: list[float, float] = kwargs.get("meteorite_damage_range", [])
         self.meteorite_cooldown_range: list[float, float] = kwargs.get("meteorite_cooldown_range", [])
 
-        self.clock = pg.time.Clock()
-        self.dt = 0
-
-        self.keys = None
-
+        # powerups
         self.powerup_queue: list[Powerup] = kwargs.get("powerup_queue", [])
         self.powerups: list[Powerup] = kwargs.get("powerups", [])
         self.active_powerups: list[Powerup] = []
 
         # any new sprite lists are defined here, filled in main.py, and accessed anywhere in this file
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
-
-        self.elapsed_time: float = 0
 
         self.soundfx_collection: dict[str, pg.mixer.Sound] = {}       
 
@@ -237,9 +303,10 @@ class Level:
                 sys.exit()
             if event.type == pg.MOUSEMOTION:
                 pg.event.set_grab(True)
-            
-    def is_rect_onscreen(self, rect: pg.Rect) -> bool:
-        if 0 < rect.x < self.parent.screen_w - rect.width and 0 < rect.y < self.parent.screen_h - self.parent.interface_h - rect.height:
+
+    # offset is to adjust 
+    def is_rect_onscreen(self, rect: pg.Rect, offset: int=0) -> bool:
+        if 0 - offset < rect.x < (self.parent.screen_w - rect.width) + offset and 0 - offset < rect.y < (self.parent.screen_h - self.parent.interface_h - rect.height) + offset:
             return True
         return False
     
@@ -302,10 +369,6 @@ class Level:
     def start(self) -> None:
         while self.running:
             
-            self.keys = pg.key.get_pressed()
-            self.check_events()
-
-            # order of rendering: background > powerups > enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
             if not self.parent.draw_background_gen:
                 self.parent.draw_background_gen = self.parent.draw_background()
             try:
@@ -313,6 +376,12 @@ class Level:
             except StopIteration:
                 self.parent.draw_background_gen = self.parent.draw_background()
 
+            self.dt = self.clock.tick(self.parent.fps) / 1000
+            self.keys = pg.key.get_pressed()
+            self.check_events()
+
+            # order of rendering: background > powerups > enemies > player > player bullets > player death anim > enemy bullets > enemy death anim
+            
             self.handle_powerups()
 
             for powerup in self.powerups:
@@ -448,7 +517,6 @@ class Level:
             self.handle_level_completion()
             
             pg.display.update()
-            self.dt = self.clock.tick(self.parent.fps) / 1000
             self.elapsed_time += self.dt
             # print(self.clock.get_fps())
 
@@ -494,7 +562,7 @@ class Round:
         self.currentLevel.parent.screen.blit(self.image, self.rect)
     
     def death_animation(self):
-        while not self.is_alive and self.rect and self.death_anim_duration > 0:
+        while not self.is_alive and self.rect and self.death_anim_duration > 0 and self.currentLevel.is_rect_onscreen(self.rect, offset=50):
             while self.death_sprite_frame_duration > 0:
                 self.currentLevel.parent.screen.blit(
                     pg.transform.scale(
@@ -587,7 +655,7 @@ class Weapon1(Weapon):
             self.rounds = [r for r in self.rounds if r.rect is not None]
             
             for round in self.rounds:
-                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect):
+                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect, offset=50):
                     round.draw()
                     
                     upwards = math.sin(math.radians(round.angle))
@@ -760,7 +828,7 @@ class Weapon4(Weapon2):
            
             for round in self.rounds:
 
-                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect):
+                if round.is_alive and self.currentLevel.is_rect_onscreen(round.rect, offset=50):
                     round.draw()
                     
                     upwards = math.sin(math.radians(round.angle))
@@ -894,8 +962,8 @@ class Weapon5(Weapon1):
                         angle=360 / self.num_rounds * (i+1) + alt_angle, 
                         spawn_position=
                         [
-                            (self.parent.rect.x + self.parent.rect.width//2) + (math.cos(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius), 
-                            (self.parent.rect.y + self.parent.rect.height//2) + (math.sin(360 / self.num_rounds * (i+1) + alt_angle) * self.shoot_radius)
+                            (self.parent.rect.x + self.parent.rect.width//2), 
+                            (self.parent.rect.y + self.parent.rect.height//2)
                         ], 
                         death_sprite_collection_name=self.round_death_sprite_collection_name,
                         width=self.round_size[0],
@@ -907,8 +975,10 @@ class Weapon5(Weapon1):
                     )
 
                     self.rounds.append(round)
-                
-                self.shoot_cooldown = self.max_shoot_cooldown
+                    self.shoot_cooldown = self.max_shoot_cooldown
+
+                    yield
+
                 alt_angle += 360 / self.num_rounds / 4
 
             yield
@@ -1220,13 +1290,13 @@ class StandardEnemy(Ship):
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), 270), (self.width, self.height))
 
         self.random_shoot_cooldowns: list[float] = kwargs.get("random_shoot_cooldowns", [1, 1.5, 2, 2.5, 3, 5])
-        self.shoot_cooldown: float = None
 
         # bounce/wave movement
         self.bounce: bool = kwargs.get("bounce", True)
         self.bounce_speed: float = kwargs.get("bounce_speed", 2) # increment for curr_angle
         self.curr_angle: float = 0 # to get the y ratio
         self.bounce_height: int = kwargs.get("bounce_height", 10) # radius of circle
+        self.bounce_delay: float = kwargs.get("bounce_delay", 0)
 
         # hit/damage indication
         self.image_hit_path = kwargs.get("image_hit_path", "images/enemy/enemy_ship1_hit1.png")
@@ -1236,29 +1306,22 @@ class StandardEnemy(Ship):
         self.move_in_animation_gen: Iterator[None] = None
 
     def shoot(self):
+        self.weapon.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
         while self.can_shoot:
-            if self.shoot_cooldown is None:
-                if self.random_shoot_cooldowns:
-                    self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
-                else:
-                    self.shoot_cooldown = 1
-        
-            self.shoot_cooldown -= self.currentLevel.dt
-            self.weapon.shoot_cooldown -= self.currentLevel.dt
 
-            if self.shoot_cooldown <= 0 and self.currentLevel.is_rect_onscreen(self.rect):
-
+            # removed dedicated shoot cooldown for enemies, improves performance
+            
+            if self.currentLevel.is_rect_onscreen(self.rect):
+                self.weapon.max_shoot_cooldown = random.choice(self.random_shoot_cooldowns)
+                
                 if not self.weapon.shoot_gen:
-                    self.weapon.shoot_gen = self.weapon.shoot()   
+                        self.weapon.shoot_gen = self.weapon.shoot()   
                 try:
                     next(self.weapon.shoot_gen)
                 except StopIteration:
                     self.weapon.shoot_gen = self.weapon.shoot()   
-
-                self.shoot_cooldown = random.choice(self.random_shoot_cooldowns)
-
+                
             yield
-        
         yield
 
     def update_position(self):
@@ -1270,8 +1333,10 @@ class StandardEnemy(Ship):
             except StopIteration:
                 self.move_in_animation_gen = self.move_in_animation()
 
+        if self.bounce_delay > 0:
+            self.bounce_delay -= self.currentLevel.dt
 
-        if self.bounce:
+        if self.bounce and self.bounce_delay <= 0:
             # self.rect.x = self.spawn_position[0] + self.bounce_height * math.cos(self.curr_angle)
             self.rect.y = self.spawn_position[1] + self.bounce_height * math.sin(math.radians(self.curr_angle))
             
@@ -1491,12 +1556,8 @@ class Meteorite(Ship):
             # if meteor has previously come on screen and also has now left the screen
             if not self.is_alive or self.passed_screen and not self.currentLevel.is_rect_onscreen(self.rect):
                 
-                # checks if the meteor is fully off screen before resetting it
-                if 0 > self.rect.x + self.rect.width + 10 \
-                or self.rect.x - self.rect.width  - 10 > self.currentLevel.parent.screen_w \
-                or 0 > self.rect.y + self.rect.height + 10 \
-                or self.rect.y - self.rect.width - 10 > self.currentLevel.parent.screen_h: 
-                
+                # if meteor is fully off-screen
+                if not self.currentLevel.is_rect_onscreen(self.rect, offset=max(self.rect.width, self.rect.height)):
                     self.reset()
                     
             self.rect.x += math.cos(math.radians(self.angle)) * self.vel
