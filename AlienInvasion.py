@@ -5,9 +5,7 @@ from typing import Iterator
 
 
 # TODO: add sprite animation to meteorite
-# TODO: make powerups compatible with enemies
 # TODO: make health bar move at variable speeds
-# TODO: add health bar visual for Ship class
 # TODO: fix occasional freezing
 
 
@@ -34,7 +32,6 @@ class Game:
         
         #powerup bars
         self.powerup_grid_position: tuple[int, int] = kwargs.get("powerup_grid_position", (350, self.screen_h - self.interface_h + 10))
-       
         self.powerup_icons: dict[Powerup, str | pg.Surface] = kwargs.get("powerup_icons", {})
 
         #health bar
@@ -133,7 +130,6 @@ class Game:
 
             self.screen.blit(text, text_rect)
             yield
-        
 
         self.running_level_interlude = False
         yield
@@ -304,7 +300,6 @@ class Level:
             if event.type == pg.MOUSEMOTION:
                 pg.event.set_grab(True)
 
-    # offset is to adjust 
     def is_rect_onscreen(self, rect: pg.Rect, offset: int=0) -> bool:
         if 0 - offset < rect.x < (self.parent.screen_w - rect.width) + offset and 0 - offset < rect.y < (self.parent.screen_h - self.parent.interface_h - rect.height) + offset:
             return True
@@ -474,7 +469,7 @@ class Level:
                 if not self.player.death_animation_gen:
                     self.player.death_animation_gen = self.player.death_animation()
                 try:
-                    next(self.player.death_animation())
+                    next(self.player.death_animation_gen)
                 except StopIteration: 
                     self.player.death_animation_gen = self.player.death_animation()
             
@@ -1005,7 +1000,7 @@ class Ship(metaclass=ABCMeta):
         # hit indication
         self.max_hit_indication_duration: float = kwargs.get("max_hit_indication_duration", 0.1)
         self.hit_indication_duration: float = 0
-        self.image_hit: pg.Surface = None
+        self.hit_indication_sprite_collection_name: str = kwargs.get("hit_indication_sprite_collection_name", None)
         self.hit_indication_audio_name: str = kwargs.get("hit_indication_audio_name", None)
 
         self.is_alive: bool = True
@@ -1019,16 +1014,11 @@ class Ship(metaclass=ABCMeta):
         self.death_sprite_size: list[int, int] = kwargs.get("death_sprite_size", [self.width, self.width])
         
         self.death_explosion_audio_name: str = kwargs.get("death_explosion_audio_name", None)
+
         # ship sprite
         self.angle = kwargs.get("angle", 270)
-        self.image_path: str = kwargs.get("image_path", "images/player/player_ship.png")
-        self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
-        self.rect: pg.Rect = self.image.get_rect(left=self.spawn_position[0], top=self.spawn_position[1])
-     
-        # hit/damage indication
-        self.image_hit_path: str = kwargs.get("image_hit_path", "images/player/player_ship_hit1.png")
-        self.image_hit: pg.Surface = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_hit_path), 270), (self.width, self.height))
-        
+        self.rect: pg.Rect = pg.Rect(self.spawn_position[0], self.spawn_position[1], self.width, self.height)
+
         # animation on spawn
         self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
         self.move_in_anim_finished: bool = False
@@ -1037,11 +1027,18 @@ class Ship(metaclass=ABCMeta):
         ## 0 = left, 1 = right
         self.move_in_from: int = kwargs.get("move_in_from", 1)
 
+        # default animation
+        self.default_sprite_collection_name: str = kwargs.get("default_sprite_collection_name", None)
+        self.max_default_anim_duration: float = kwargs.get("max_default_anim_duration", 0.5)
+        self.default_anim_duration: float = self.max_default_anim_duration
+        self.default_anim_sprite_size: tuple[int, int] = kwargs.get("default_anim_sprite_size", [125, 75])
+
         # iterators
         self.death_animation_gen: Iterator[None] = None
         self.shoot_gen: Iterator[None] = None
         self.hit_indication_animation_gen: Iterator[None] = None
         self.draw_health_bar_gen: Iterator[None] = None
+        self.default_animation_gen: Iterator[None] = None
 
     @abstractmethod
     def shoot(self, angle: int) -> None:
@@ -1049,16 +1046,21 @@ class Ship(metaclass=ABCMeta):
 
     def draw(self) -> None:
 
-        self.currentLevel.parent.screen.blit(self.image, self.rect)
+        # self.currentLevel.parent.screen.blit(self.image, self.rect)
 
-        if self.hit_indication_duration > 0:
-            
-            if not self.hit_indication_animation_gen:
-                self.hit_indication_animation_gen = self.hit_indication_anim() 
-            try:
-                next(self.hit_indication_animation_gen)
-            except StopIteration:
-                self.hit_indication_animation_gen = self.hit_indication_anim() 
+        if not self.hit_indication_animation_gen:
+            self.hit_indication_animation_gen = self.hit_indication_anim() 
+        try:
+            next(self.hit_indication_animation_gen)
+        except StopIteration:
+            self.hit_indication_animation_gen = self.hit_indication_anim() 
+        
+        if not self.default_animation_gen:
+            self.default_animation_gen = self.default_animation()
+        try:
+            next(self.default_animation_gen)
+        except StopIteration:
+            self.default_animation_gen = self.default_animation()
 
     @abstractmethod
     def handle_health(self):
@@ -1080,11 +1082,15 @@ class Ship(metaclass=ABCMeta):
         self.health = min(self.health + amount, self.max_health)
     
     def hit_indication_anim(self):
-        while self.hit_indication_duration:
-            self.currentLevel.parent.screen.blit(self.image_hit, self.rect)
+        prev_default_sprite_collection_name = self.default_sprite_collection_name
+        self.default_sprite_collection_name = self.hit_indication_sprite_collection_name
+
+        while self.hit_indication_duration > 0:
             self.hit_indication_duration -= self.currentLevel.dt
             yield
 
+        print(prev_default_sprite_collection_name)
+        self.default_sprite_collection_name = prev_default_sprite_collection_name
         yield
 
     def death_animation(self):
@@ -1127,6 +1133,32 @@ class Ship(metaclass=ABCMeta):
         self.rect = None
         
         yield 
+    
+    def default_animation(self):
+
+        max_frame_duration = self.default_anim_duration / len(self.currentLevel.sprite_collections[self.default_sprite_collection_name])
+        curr_frame_duration = max_frame_duration
+        
+        # frame_list = [pg.transform.scale(pg.transform.rotate(frame, self.angle-90), self.default_anim_sprite_size) for frame in frame_list]
+
+        while True:
+            frame_list_idx = 0
+            self.default_anim_duration = self.max_default_anim_duration
+            
+            while self.default_anim_duration > 0:
+                frame_list: list[pg.Surface] = self.currentLevel.sprite_collections[self.default_sprite_collection_name]
+
+                while curr_frame_duration > 0:
+                    self.currentLevel.parent.screen.blit(pg.transform.scale(pg.transform.rotate(frame_list[frame_list_idx], self.angle-90), self.default_anim_sprite_size), (self.rect.x, self.rect.y, *self.default_anim_sprite_size))
+
+                    curr_frame_duration -= self.currentLevel.dt
+                    self.default_anim_duration -= self.currentLevel.dt
+
+                    yield
+                
+                curr_frame_duration = max_frame_duration
+                frame_list_idx += 1
+            
 
     def play_death_audio(self):
          if self.death_explosion_audio_name:
