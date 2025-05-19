@@ -10,12 +10,14 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             parent=currentLevel, 
             spawn_position=[left, top + (spacing * i)], 
             death_sprite_collection_name="explosion1", 
-            default_sprite_collection_name="player_default_anim",
-            hit_indication_sprite_collection_name="player_default_anim_hit",
-            width=kwargs.get("width", 100),
-            height=kwargs.get("height", 75),
+            default_sprite_collection_name="enemy1_default_anim",
+            default_anim_sprite_size=[100, 50],
+            hit_indication_sprite_collection_name="enemy1_default_anim_hit",
+            width=kwargs.get("width", 50),
+            height=kwargs.get("height", 50),
             random_shoot_cooldowns=kwargs.get("random_shoot_cooldowns", [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3]),
             angle=180,
+            rect_offset=[10, 0],
             death_anim_duration=0.5,
             move_in_offset=kwargs.get("move_in_offset", 900),
             move_in_from=1,
@@ -25,7 +27,8 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
             bounce_height=kwargs.get("bounce_height", random.choice([7, 8, 9, 10, 11])),
             # hit_indication_audio_name="hitmarker_2"
             draw_health=kwargs.get("draw_healt", False),
-            bounce_delay=kwargs.get("bounce_delay", 0)
+            bounce_delay=kwargs.get("bounce_delay", 0),
+            draw_rect=False,
             
             
         )
@@ -44,6 +47,7 @@ def create_fleet(currentLevel: Level, num: int, left: int, top: int, spacing: in
         enemy_weapon.shoot_angle = 180
         enemy_weapon.round_image_path = kwargs.get("round_image_path", "images/Pixel SHMUP Free 1.2/projectile_3.png")
         enemy_weapon.round_spawn_offset = [0, enemy.rect.height//2]
+        enemy_weapon.round_draw_rect=kwargs.get("round_draw_rect", False)
 
         fleet.append(enemy)
         
@@ -97,7 +101,25 @@ class Level1(Level):
                 "images/player/player_ship_hit5.png",
                 "images/player/player_ship_hit6.png",
                 
-            ]
+            ],
+            "enemy1_default_anim": 
+            [
+                "images/enemy/enemy_ship2_1.png",
+                "images/enemy/enemy_ship2_2.png",
+                "images/enemy/enemy_ship2_3.png",
+                "images/enemy/enemy_ship2_4.png",
+                "images/enemy/enemy_ship2_5.png",
+                "images/enemy/enemy_ship2_6.png",
+            ],
+            "enemy1_default_anim_hit": 
+            [
+                "images/enemy/enemy_ship2_hit1.png",
+                "images/enemy/enemy_ship2_hit2.png",
+                "images/enemy/enemy_ship2_hit3.png",
+                "images/enemy/enemy_ship2_hit4.png",
+                "images/enemy/enemy_ship2_hit5.png",
+                "images/enemy/enemy_ship2_hit6.png",
+            ],
         }
         
 
@@ -116,6 +138,7 @@ class Level1(Level):
             parent=self,
             vel=10, 
             angle=0,
+            width=75,
             death_sprite_collection_name="explosion1",
             default_sprite_collection_name="player_default_anim",
             hit_indication_sprite_collection_name="player_default_anim_hit",
@@ -123,17 +146,20 @@ class Level1(Level):
             max_health=300, 
             move_in_from=0,
             move_in_offset=-2500,
+            rect_offset=[50, 0],
+            draw_rect=True,
             
         )
-        weapon1: Weapon = Weapon2(
+        weapon1: Weapon = Weapon4(
             self, 
             parent=self.player, 
             max_shoot_cooldown=0.2, 
             round_death_sprite_collection_name="explosion1", 
             damage=15,
-            round_size=[25, 7],
+            round_size=[50, 7],
             round_angle=90,
-            round_spawn_offset=[self.player.rect.width, self.player.rect.height//2]
+            round_spawn_offset=[self.player.rect.width, self.player.rect.height//2],
+            round_draw_rect=False,
            
             # round_vel=1
         )
@@ -143,20 +169,22 @@ class Level1(Level):
         big_enemy = StandardEnemy(
             self, 
             parent=self, 
-            width=150, 
+            width=110, 
             height=150, 
-            default_anim_sprite_size=[210, 150],
+            default_anim_sprite_size=[280, 150],
             angle=180,
             spawn_position=[1000, 250], 
             death_sprite_collection_name="explosion1",
-            default_sprite_collection_name="player_default_anim",
-            hit_indication_sprite_collection_name="player_default_anim_hit",
+            default_sprite_collection_name="enemy1_default_anim",
+            hit_indication_sprite_collection_name="enemy1_default_anim_hit",
             random_shoot_cooldowns=[0], 
             max_health=2000,
             move_in_from=1,
             num_death_explosions=10,
             death_explosion_audio_name="big_explosion_1",
             draw_health=True,
+            draw_rect=False,
+            rect_offset=[20, 0],
             # hit_indication_audio_name="hitmarker_2"
         )
 
@@ -172,6 +200,7 @@ class Level1(Level):
             damage=5, 
             shoot_angle=180,
             round_size=[20, 20],  
+            num_rounds=20,
             round_spawn_offset=[0, big_enemy.rect.height//2]                       
         )
 
@@ -196,9 +225,9 @@ class Level1(Level):
         ]
 
         self.meteorites = [
-            Meteorite(self, parent=self, death_sprite_collection_name="explosion1"),
-            Meteorite(self, parent=self, death_sprite_collection_name="explosion1"),
-            Meteorite(self, parent=self, death_sprite_collection_name="explosion1"),
+            Meteorite(self, parent=self, death_sprite_collection_name="explosion1", draw_rect=False),
+            Meteorite(self, parent=self, death_sprite_collection_name="explosion1", draw_rect=False),
+            Meteorite(self, parent=self, death_sprite_collection_name="explosion1", draw_rect=False),
         ]
 
 
@@ -215,14 +244,36 @@ class Level2(Level1):
             height=150, 
             spawn_position=[1000, 250], 
             death_sprite_collection_name="explosion1",
-            default_sprite_collection_name="player_default_anim",
-            hit_indication_sprite_collection_name="player_default_anim_hit",
+            default_sprite_collection_name="enemy1_default_anim",
+            hit_indication_sprite_collection_name="enemy1_default_anim_hit",
             random_shoot_cooldowns=[0], 
             max_health=2000,
             move_in_from=1,
             num_death_explosions=10,
             death_explosion_audio_name="big_explosion_1",
             draw_health=True,
+            # hit_indication_audio_name="hitmarker_2"
+        )
+
+        big_enemy = StandardEnemy(
+            self, 
+            parent=self, 
+            width=110, 
+            height=150, 
+            default_anim_sprite_size=[210, 150],
+            angle=180,
+            spawn_position=[1000, 250], 
+            death_sprite_collection_name="explosion1",
+            default_sprite_collection_name="enemy1_default_anim",
+            hit_indication_sprite_collection_name="enemy1_default_anim_hit",
+            random_shoot_cooldowns=[0], 
+            max_health=2000,
+            move_in_from=1,
+            num_death_explosions=10,
+            death_explosion_audio_name="big_explosion_1",
+            draw_health=True,
+            draw_rect=False,
+            rect_offset=[20, 0],
             # hit_indication_audio_name="hitmarker_2"
         )
 
@@ -238,6 +289,7 @@ class Level2(Level1):
             damage=5, 
             shoot_angle=180,
             round_size=[20, 20],  
+            num_rounds=20,
             round_spawn_offset=[0, big_enemy.rect.height//2]                       
         )
 

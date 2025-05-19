@@ -543,30 +543,35 @@ class Round:
 
         # sprite 
         self.image_path: str = kwargs.get("image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
-        
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
+
         self.rect: pg.Rect = pg.Rect(self.spawn_position[0], self.spawn_position[1], self.width, self.height)
-        
+        self.draw_rect: bool = kwargs.get("draw_rect", False)
+
         # iterators
         self.death_animation_gen: Iterator[None] = None
 
     def draw(self):
+        if self.draw_rect:
+            pg.draw.rect(self.currentLevel.parent.screen, (255, 0, 0), self.rect, 2)
+
         if self.angle != self.prev_angle:
-            self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), -self.angle), (self.width, self.height))
+            self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle-180), (self.width, self.height))
             self.prev_angle = self.angle
         self.currentLevel.parent.screen.blit(self.image, self.rect)
     
     def death_animation(self):
         while not self.is_alive and self.rect and self.death_anim_duration > 0 and self.currentLevel.is_rect_onscreen(self.rect, offset=50):
             while self.death_sprite_frame_duration > 0:
+
                 self.currentLevel.parent.screen.blit(
                     pg.transform.scale(
                         self.currentLevel.sprite_collections[self.death_sprite_collection_name][self.death_sprite_frame_index], 
                         self.death_sprite_size
                     ), 
                     (
-                        self.rect.x - self.death_sprite_size[0]//2, 
-                        self.rect.y - self.death_sprite_size[1]//2
+                        self.rect.x + self.rect.width//2 + (math.cos(math.radians(self.angle)) * self.rect.width//2) - self.death_sprite_size[0]//2, 
+                        self.rect.y + self.rect.height//2 + (math.sin(math.radians(self.angle)) * self.rect.height//2) - self.death_sprite_size[0]//2
                     )
                 )
 
@@ -594,6 +599,7 @@ class Weapon(metaclass=ABCMeta):
         self.round_color: tuple = kwargs.get("round_color", (255, 0, 0))
         self.round_size: tuple[int, int] = kwargs.get("round_size", (7, 3))
         self.round_vel: int = kwargs.get("round_vel", 10)
+        self.round_draw_rect: bool = kwargs.get("round_draw_rect", False)
 
         self.round_death_sprite_collection_name: str = kwargs.get("round_death_sprite_collection_name", None)
         self.round_image_path: str = kwargs.get("round_image_path", "images/Pixel SHMUP Free 1.2/projectile_1.png")
@@ -638,6 +644,7 @@ class Weapon1(Weapon):
                     color=self.round_color,
                     vel=self.round_vel,
                     image_path=self.round_image_path,
+                    round_draw_rect=self.round_draw_rect,
                 )
                 self.rounds.append(round)
                 self.shoot_cooldown = self.max_shoot_cooldown
@@ -707,6 +714,7 @@ class Weapon2(Weapon1):
                     color=self.round_color,
                     image_path=self.round_image_path,
                     vel=self.round_vel,
+                    round_draw_rect=self.round_draw_rect,
                     
                 )
                 round2 = Round(
@@ -719,7 +727,8 @@ class Weapon2(Weapon1):
                     height=self.round_size[1],
                     color=self.round_color,
                     image_path=self.round_image_path,
-                    vel=self.round_vel
+                    vel=self.round_vel,
+                    round_draw_rect=self.round_draw_rect,
 
                 )
             
@@ -778,7 +787,8 @@ class Weapon3(Weapon2):
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path=self.round_image_path
+                    image_path=self.round_image_path,
+                    round_draw_rect=self.round_draw_rect,
                 )
 
                 round2 = Round(
@@ -791,7 +801,8 @@ class Weapon3(Weapon2):
                     height=self.round_size[1],
                     color=self.round_color,
                     vel=self.round_vel,
-                    image_path=self.round_image_path
+                    image_path=self.round_image_path,
+                    round_draw_rect=self.round_draw_rect,
                 )
 
                 self.rounds.append(round1)
@@ -891,7 +902,7 @@ class Weapon4(Weapon2):
                 self.shoot_cooldown -= self.currentLevel.dt
 
             if self.shoot_cooldown <= 0 and self.closest_enemy and self.closest_enemy.is_alive \
-                and ((self.parent.rect.x - 20 > enemy.rect.x and isinstance(self.parent, StandardEnemy)) or (self.parent.rect.x + self.parent.rect.width + 20 < enemy.rect.x and isinstance(self.parent, Player))):
+                and ((self.parent.rect.x - 20 > self.closest_enemy.rect.x and isinstance(self.parent, StandardEnemy)) or (self.parent.rect.x + self.parent.rect.width + 20 < self.closest_enemy.rect.x and isinstance(self.parent, Player))):
                 
                 round1 = Round(
                     self.currentLevel, 
@@ -907,6 +918,7 @@ class Weapon4(Weapon2):
                     color=self.round_color,
                     vel=self.round_vel,
                     image_path=self.round_image_path,
+                    round_draw_rect=self.round_draw_rect,
                 )
                 round1.angle = self.get_closest_enemy_angle(round1)
 
@@ -924,6 +936,7 @@ class Weapon4(Weapon2):
                     color=self.round_color,
                     vel=self.round_vel,
                     image_path=self.round_image_path,
+                    round_draw_rect=self.round_draw_rect,
                 )
 
                 round2.angle = self.get_closest_enemy_angle(round1)
@@ -966,6 +979,7 @@ class Weapon5(Weapon1):
                         color=self.round_color,
                         vel=self.round_vel,
                         image_path=self.round_image_path,
+                        round_draw_rect=self.round_draw_rect,
 
                     )
 
@@ -974,7 +988,8 @@ class Weapon5(Weapon1):
 
                     yield
 
-                alt_angle += 360 / self.num_rounds / 4
+                if self.num_rounds > 0:
+                    alt_angle += 360 / self.num_rounds / 4
 
             yield
 
@@ -1015,10 +1030,12 @@ class Ship(metaclass=ABCMeta):
         
         self.death_explosion_audio_name: str = kwargs.get("death_explosion_audio_name", None)
 
-        # ship sprite
+        # ship rect
         self.angle = kwargs.get("angle", 270)
+        self.rect_offset: tuple[int, int] = kwargs.get("rect_offset", [0, 0])
         self.rect: pg.Rect = pg.Rect(self.spawn_position[0], self.spawn_position[1], self.width, self.height)
-
+        self.draw_rect: bool = kwargs.get("draw_rect", True)
+        
         # animation on spawn
         self.move_in_on_spawn: bool = kwargs.get("move_in_on_spawn", True)
         self.move_in_anim_finished: bool = False
@@ -1027,7 +1044,7 @@ class Ship(metaclass=ABCMeta):
         ## 0 = left, 1 = right
         self.move_in_from: int = kwargs.get("move_in_from", 1)
 
-        # default animation
+        # default sprite animation
         self.default_sprite_collection_name: str = kwargs.get("default_sprite_collection_name", None)
         self.max_default_anim_duration: float = kwargs.get("max_default_anim_duration", 0.5)
         self.default_anim_duration: float = self.max_default_anim_duration
@@ -1045,8 +1062,8 @@ class Ship(metaclass=ABCMeta):
         pass
 
     def draw(self) -> None:
-
-        # self.currentLevel.parent.screen.blit(self.image, self.rect)
+        if self.draw_rect:
+            pg.draw.rect(self.currentLevel.parent.screen, (255, 0, 0), self.rect, 2)
 
         if not self.hit_indication_animation_gen:
             self.hit_indication_animation_gen = self.hit_indication_anim() 
@@ -1089,7 +1106,6 @@ class Ship(metaclass=ABCMeta):
             self.hit_indication_duration -= self.currentLevel.dt
             yield
 
-        print(prev_default_sprite_collection_name)
         self.default_sprite_collection_name = prev_default_sprite_collection_name
         yield
 
@@ -1139,8 +1155,6 @@ class Ship(metaclass=ABCMeta):
         max_frame_duration = self.default_anim_duration / len(self.currentLevel.sprite_collections[self.default_sprite_collection_name])
         curr_frame_duration = max_frame_duration
         
-        # frame_list = [pg.transform.scale(pg.transform.rotate(frame, self.angle-90), self.default_anim_sprite_size) for frame in frame_list]
-
         while True:
             frame_list_idx = 0
             self.default_anim_duration = self.max_default_anim_duration
@@ -1149,7 +1163,7 @@ class Ship(metaclass=ABCMeta):
                 frame_list: list[pg.Surface] = self.currentLevel.sprite_collections[self.default_sprite_collection_name]
 
                 while curr_frame_duration > 0:
-                    self.currentLevel.parent.screen.blit(pg.transform.scale(pg.transform.rotate(frame_list[frame_list_idx], self.angle-90), self.default_anim_sprite_size), (self.rect.x, self.rect.y, *self.default_anim_sprite_size))
+                    self.currentLevel.parent.screen.blit(pg.transform.scale(pg.transform.rotate(frame_list[frame_list_idx], self.angle-90), self.default_anim_sprite_size), (self.rect.x - self.rect_offset[0], self.rect.y - self.rect_offset[1], *self.default_anim_sprite_size))
 
                     curr_frame_duration -= self.currentLevel.dt
                     self.default_anim_duration -= self.currentLevel.dt
@@ -1158,7 +1172,6 @@ class Ship(metaclass=ABCMeta):
                 
                 curr_frame_duration = max_frame_duration
                 frame_list_idx += 1
-            
 
     def play_death_audio(self):
          if self.death_explosion_audio_name:
@@ -1603,6 +1616,9 @@ class Meteorite(Ship):
             self.rect = None
 
     def draw(self):
+        if self.draw_rect:
+            pg.draw.rect(self.currentLevel.parent.screen, (255, 0, 0), self.rect, 2)
+
         self.currentLevel.parent.screen.blit(self.image, self.rect)
 
     def handle_collision(self):
