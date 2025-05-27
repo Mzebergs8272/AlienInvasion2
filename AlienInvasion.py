@@ -1,13 +1,185 @@
-import pygame as pg, sys, math, os, random, colorsys, cv2
+import pygame as pg, sys, math, os, random, colorsys, cv2, asyncio, json, time, websockets, threading, timeit
 from abc import abstractmethod, ABCMeta
 from typing import Iterator
+from websockets import WebSocketClientProtocol
 
 
-
-# TODO: add sprite animation to meteorite
+# TODO: improve peformance of ship sprite animations
 # TODO: make health bar move at variable speeds
-# TODO: fix occasional freezing
 
+
+# TODO: implement multiplayer
+## sub-tasks:
+
+### both players, all ships, meteorites and powerups are placed in dictionaries, instead of lists, with unique IDs
+#### this means there will need to be functions to correctly add entities e.g., add_player(), add_enemy(), add_meteorite() inside of Level
+#### the IDs of all entities are created in the server.py file and sent to both clients to be applied
+
+### to simulate other player hitting an enemy or meteorite or powerup:
+
+#### create functions in Client to log these actions into player_curr_actions dictionary and implement these actions wherever necessary
+##### formats for some of the fields: "damaged_enemies": ["enemy1", "enemy2"]
+
+### to update the attributes of all entities:
+
+#### a function such as "update_entities() -> None" should be implemented:
+##### this function will take a dict as input
+###### the format of the dictionary should be something like this:
+"""
+curr_actions = {
+    "enemies": 
+    {
+        "enemy_1": 
+        {
+            "health": 50
+        },
+        "enemy_2:
+        {
+            "health": 20
+        }
+    }
+
+    "powerups": ["powerup_1"],
+
+    "meteorites": ["meteorite_1"]
+    
+}
+
+in this frame: the client has dealt damage to enemy_1 and enemy_2, has picked up a powerup and has hit a meteorite.
+
+note: the attribute names e.g., "health", listed in the dict, must be identical to the corresponding ones in the corresponding objects.
+
+the powerups and meteorites will need to be able to interact with both player objects,
+so it's required to add arguments to the methods of the powerups e.g., def effect(self, player: Player) so they can be used on command
+
+"""
+
+### to ensure synchronisation of both player's actions, by making all the attributes all entities of both clients the same,
+### the initial attributes of all objects need to be shared by the host (the first client to connect to the server).
+### this means these attributes need to be configured before the clients' levels start.
+### step-by-step this would be like: use a function in Client to grab all the attributes of all entities using .__dict__ 
+### and plugging them into a larger dict with a format such as: 
+"""
+    "enemies": 
+    {
+        "enemy_1": 
+        {
+            "spawn_position": 10, 
+            "death_sprite_collection_name": "explosion1", 
+            "default_sprite_collection_name": "enemy1_default_anim",
+            "default_anim_sprite_size": [100, 50],
+            "hit_indication_sprite_collection_name": "enemy1_default_anim_hit",
+            "width": 50,
+            "height": 50,
+            "random_shoot_cooldowns": [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3],
+            "angle": 180,
+            "rect_offset": [10, 0],
+            "death_anim_duration": 0.5,
+            "move_in_offset": 900,
+            "move_in_from": 1,
+            "max_death_explosion_interval_time": 0.15,
+            "num_death_explosions": 3,
+            "bounce_speed": 2,
+            "bounce_height": 7,
+            "draw_health": False,
+            "bounce_delay": 0,
+            "draw_rect": False,
+        },
+        "enemy_1_weapon": {
+            <all attributes of a weapon>
+        }
+
+
+        
+    }
+
+
+attributes that are objects such as currentLevel or parent cannot be shared, so make sure to exclude any of those specific attributes
+additionally, the weapons and their attributes of all ships also must be included
+note: to easily copy the attributes from the dict to an object use: example_entity.__dict__.update(example_shared_dict)
+
+this operation will be done with a unique function to send and share these attributes and they will be recieved and applied with a unique function
+e.g., send_all_entity_attributes() and configure_all_entity_attributes
+
+
+"""
+
+
+def time_function(desc: str):
+    def decorator(func):
+        def wrapper():
+            print(f"{desc} took {timeit.timeit(func, number=1)} to run")
+        
+        return wrapper
+    return decorator
+
+
+
+class Client:
+    def __init__(self, game: object, id: int): 
+        self.game: Game = game
+        self.id: int = random.randint(0, 100)
+        self.server: WebSocketClientProtocol = None
+        self.uri: str = "ws://109.147.61.116:8765"
+
+        self.other_player: Player = None
+        self.other_player_curr_actions: dict[str, str] = {
+            "is_shooting": False,
+            "x": 50,
+            "y": 50,
+        }
+        self.client_curr_actions: dict[str, str] = {
+            "is_shooting": False,
+            "x": 50,
+            "y": 50,
+        }
+
+    def get_player_data(self) -> dict:
+        return
+
+    async def run(self):
+        async with websockets.connect(self.uri) as self.server:
+            await self.server.send(json.dumps({"id": self.id}))
+
+            while True:
+                await self.server.send(json.dumps(self.client_curr_actions))
+
+                other_player_data = await self.server.recv()
+
+                if other_player_data:
+                    
+                    self.other_player_curr_actions = {
+                        "is_shooting": False,
+                        "x": 50,
+                        "y": 50,
+                    }
+
+                    other_player_data: dict[str, int] = json.loads(other_player_data)
+                    
+                    if not self.other_player:
+                        self.second_player = Player(
+                            self.game.currentLevel, 
+                            self.game.currentLevel,
+                            vel=10, 
+                            angle=0,
+                            width=75,
+                            death_sprite_collection_name="explosion1",
+                            default_sprite_collection_name="player_default_anim",
+                            hit_indication_sprite_collection_name="player_default_anim_hit",
+                            spawn_position=[150, 150],
+                            max_health=300, 
+                            move_in_from=0,
+                            move_in_offset=-2500,
+                            rect_offset=[50, 0],
+                            draw_rect=True,
+                            is_other_player=True,
+                        )
+                
+
+                    self.other_player_curr_actions = other_player_data
+
+                # await asyncio.sleep(0.05) 
+           
 
 
 class Game:
@@ -20,6 +192,8 @@ class Game:
         self.fps: int = kwargs.get("fps", 60)
         self.clock: pg.time.Clock = pg.time.Clock()
         self.dt: float = 0
+
+        # self.client: Client = Client(self, 1)
 
         pg.display.set_caption("Alien Invasion 2")
 
@@ -89,7 +263,7 @@ class Game:
               
                 self.currentLevel = level
                 
-                level.start()
+                level.run()
 
                 prev_level = level
                 self.currentLevelIdx += 1
@@ -282,7 +456,7 @@ class Level:
         self.sprite_collections: dict[str: list[pg.Surface]] = kwargs.get("sprite_collections", {})
 
         self.soundfx_collection: dict[str, pg.mixer.Sound] = {}       
-
+    
     def load_sprites(self) -> None:
         for name, collection in self.sprite_collections.items():
             self.sprite_collections[name] = [pg.image.load(path) for path in collection]
@@ -360,10 +534,18 @@ class Level:
                 next(self.player.move_in_animation_gen)
             except StopIteration:
                 self.player.move_in_animation_gen = self.player.move_in_animation()
+    
+    def start_async_client(self):
+        asyncio.run(self.parent.client.run())
 
-    def start(self) -> None:
+    def start(self):
+        thread = threading.Thread(target=self.start_async_client, daemon=True)
+        thread.start()
+        self.run()
+
+    def run(self):
         while self.running:
-            
+
             if not self.parent.draw_background_gen:
                 self.parent.draw_background_gen = self.parent.draw_background()
             try:
@@ -424,55 +606,68 @@ class Level:
                     self.enemies.remove(enemy)
 
             self.handle_level_start_animations()
-            
-            if self.player.is_alive:
-            
-                self.player.draw()
 
-                if self.player.move_in_anim_finished:
-                    if not self.player.move_to_cursor_gen:
-                        self.player.move_to_cursor_gen = self.player.move_to_cursor()
-                    try:
-                        next(self.player.move_to_cursor_gen)
-                    except StopIteration: 
-                        self.player.move_to_cursor_gen = self.player.move_to_cursor()
+            for player in [self.player]:
+
+                if not player: continue
+
+                if player.is_alive:
                 
-                if self.player.draw_health:
-                    if not self.player.draw_health_bar_gen:
-                        self.player.draw_health_bar_gen = self.player.draw_health_bar()
-                    try:
-                        next(self.player.draw_health_bar_gen)
-                    except StopIteration:
-                        self.player.draw_health_bar_gen = self.player.draw_health_bar()
-
-                if self.is_rect_onscreen(self.player.rect):
-
-                    if not self.player.shoot_gen:
-                        self.player.shoot_gen = self.player.shoot()
-                    try:
-                        next(self.player.shoot_gen)
-                    except StopIteration: 
-                        self.player.shoot_gen = self.player.shoot()
-
-                if self.player.weapon.rounds:
-
-                    if not self.player.weapon.update_rounds_gen:
-                        self.player.weapon.update_rounds_gen = self.player.weapon.update_rounds()
-                    try:
-                        next(self.player.weapon.update_rounds_gen)
-                    except StopIteration: 
-                        self.player.weapon.update_rounds_gen = self.player.weapon.update_rounds()
-
-                    self.player.handle_bullet_collision() 
-            else:
-
-                if not self.player.death_animation_gen:
-                    self.player.death_animation_gen = self.player.death_animation()
-                try:
-                    next(self.player.death_animation_gen)
-                except StopIteration: 
-                    self.player.death_animation_gen = self.player.death_animation()
+                    player.draw()
+                    if not player.is_other_player:
+                        if player.move_in_anim_finished:
+                            if not player.move_to_cursor_gen:
+                                player.move_to_cursor_gen = player.move_to_cursor()
+                            try:
+                                next(player.move_to_cursor_gen)
+                            except StopIteration: 
+                                player.move_to_cursor_gen = player.move_to_cursor()
+                            
+          
+                        
+                        if player.draw_health:
+                            if not player.draw_health_bar_gen:
+                                player.draw_health_bar_gen = player.draw_health_bar()
+                            try:
+                                next(player.draw_health_bar_gen)
+                            except StopIteration:
+                                player.draw_health_bar_gen = player.draw_health_bar()
+                    
             
+                    if self.is_rect_onscreen(player.rect):
+
+                        if not player.shoot_gen:
+                            player.shoot_gen = player.shoot()
+                        try:
+                            # if curr player is client-side or if player is not client-side and is shooting
+                            if not player.is_other_player or player.is_other_player:
+                                next(player.shoot_gen)
+                        except StopIteration: 
+                            player.shoot_gen = player.shoot()
+                
+                    if not player.weapon.update_rounds_gen:
+                        player.weapon.update_rounds_gen = player.weapon.update_rounds()
+                    try:
+                        next(player.weapon.update_rounds_gen)
+                    except StopIteration: 
+                        player.weapon.update_rounds_gen = player.weapon.update_rounds()
+
+                    if not player.handle_bullet_collision_gen:
+                        player.handle_bullet_collision_gen = player.handle_bullet_collision()
+                    try:
+                        next(player.handle_bullet_collision_gen)
+                    except StopIteration:
+                        player.handle_bullet_collision_gen = player.handle_bullet_collision()
+                        
+                else:
+
+                    if not player.death_animation_gen:
+                        player.death_animation_gen = player.death_animation()
+                    try:
+                        next(player.death_animation_gen)
+                    except StopIteration: 
+                        player.death_animation_gen = player.death_animation()
+                
             for enemy in self.enemies:
                 if enemy.is_alive:
 
@@ -490,9 +685,15 @@ class Level:
                             next(enemy.draw_health_bar_gen)
                         except StopIteration:
                             enemy.draw_health_bar_gen = enemy.draw_health_bar()
+                    
+                    if not enemy.handle_bullet_collision_gen:
+                        enemy.handle_bullet_collision_gen = enemy.handle_bullet_collision()
+                    try:
+                        next(enemy.handle_bullet_collision_gen)
+                    except StopIteration:
+                        enemy.handle_bullet_collision_gen = enemy.handle_bullet_collision()
 
-                    enemy.handle_bullet_collision()
-                else:
+                else: 
 
                     if not enemy.death_animation_gen:
                         enemy.death_animation_gen = enemy.death_animation()
@@ -511,9 +712,12 @@ class Level:
             self.parent.draw_interface()
             self.handle_level_completion()
             
+
             pg.display.update()
             self.elapsed_time += self.dt
-            # print(self.clock.get_fps())
+            print(self.clock.get_fps())
+
+            # time.sleep(self.dt)
 
 
 # for weapons
@@ -1009,7 +1213,7 @@ class Ship(metaclass=ABCMeta):
         self.health: float = self.max_health
         self.immune: bool = kwargs.get("immune", False)
         self.draw_health: bool = kwargs.get("draw_health", False)
-
+        self.is_alive: bool = True
         self.can_shoot: bool = True
 
         # hit indication
@@ -1018,7 +1222,7 @@ class Ship(metaclass=ABCMeta):
         self.hit_indication_sprite_collection_name: str = kwargs.get("hit_indication_sprite_collection_name", None)
         self.hit_indication_audio_name: str = kwargs.get("hit_indication_audio_name", None)
 
-        self.is_alive: bool = True
+        self.max_round_comparisons_per_frame: int = kwargs.get("max_round_comparisons_per_frame", 5)
 
         # death animation
         self.num_death_explosions: int = kwargs.get("num_death_explosions", 3)
@@ -1056,6 +1260,7 @@ class Ship(metaclass=ABCMeta):
         self.hit_indication_animation_gen: Iterator[None] = None
         self.draw_health_bar_gen: Iterator[None] = None
         self.default_animation_gen: Iterator[None] = None
+        self.handle_bullet_collision_gen: Iterator[None] = None
 
     @abstractmethod
     def shoot(self, angle: int) -> None:
@@ -1151,7 +1356,6 @@ class Ship(metaclass=ABCMeta):
         yield 
     
     def default_animation(self):
-
         max_frame_duration = self.default_anim_duration / len(self.currentLevel.sprite_collections[self.default_sprite_collection_name])
         curr_frame_duration = max_frame_duration
         
@@ -1161,6 +1365,8 @@ class Ship(metaclass=ABCMeta):
             
             while self.default_anim_duration > 0:
                 frame_list: list[pg.Surface] = self.currentLevel.sprite_collections[self.default_sprite_collection_name]
+
+                
 
                 while curr_frame_duration > 0:
                     self.currentLevel.parent.screen.blit(pg.transform.scale(pg.transform.rotate(frame_list[frame_list_idx], self.angle-90), self.default_anim_sprite_size), (self.rect.x - self.rect_offset[0], self.rect.y - self.rect_offset[1], *self.default_anim_sprite_size))
@@ -1245,28 +1451,48 @@ class Player(Ship):
 
         self.move_out_anim_finished: bool = True
 
+        # multiplayer
+
+        self.is_other_player: bool = False
+
     def shoot(self):
         while self.can_shoot:
             self.weapon.shoot_cooldown -= self.currentLevel.dt
             if (self.currentLevel.keys[pg.K_SPACE] or pg.mouse.get_pressed()[0]):
-
                 if not self.weapon.shoot_gen:
                     self.weapon.shoot_gen = self.weapon.shoot()
                 try:
                     next(self.weapon.shoot_gen)
                 except StopIteration:
                     self.weapon.shoot_gen = self.weapon.shoot()
-
             yield
+        
         yield
 
-    def handle_bullet_collision(self) -> None:
-        for round in self.weapon.rounds:
-            for enemy in self.currentLevel.enemies + self.currentLevel.meteorites:
-                if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
-                    enemy.take_health(self.weapon.damage)
-                    round.is_alive = False
-                    enemy.handle_health()
+    def handle_bullet_collision(self):
+        i = 0 
+        j = self.max_round_comparisons_per_frame
+
+        while self.weapon.rounds: 
+            i = min(i, len(self.weapon.rounds))
+            j = min(j, len(self.weapon.rounds))
+            for round in self.weapon.rounds[i:j]:
+                for enemy in self.currentLevel.enemies + self.currentLevel.meteorites:
+                    if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
+                        enemy.take_health(self.weapon.damage)
+                        round.is_alive = False
+                        enemy.handle_health()
+
+            i += self.max_round_comparisons_per_frame
+            j += self.max_round_comparisons_per_frame
+
+            if j > len(self.weapon.rounds):
+                i = 0
+                j = self.max_round_comparisons_per_frame
+            
+            yield
+            
+        yield
         
         self.weapon.rounds = [r for r in self.weapon.rounds if r.rect is not None]
     
@@ -1394,13 +1620,32 @@ class StandardEnemy(Ship):
         if self.death_anim_duration <= 0:
             self.rect = None
 
-    def handle_bullet_collision(self) -> None:
-        for enemy in [self.currentLevel.player] + self.currentLevel.meteorites:
+    def handle_bullet_collision(self):
+        i = 0 
+        j = self.max_round_comparisons_per_frame
+
+        while self.weapon.rounds:
+            i = min(i, len(self.weapon.rounds))
+            j = min(j, len(self.weapon.rounds))
+
             for round in self.weapon.rounds:
-                if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
-                    enemy.take_health(self.weapon.damage)
-                    round.is_alive = False
-                    enemy.handle_health()
+                
+                for enemy in [self.currentLevel.player] + self.currentLevel.meteorites:
+                    if enemy.is_alive and round.is_alive and round.rect.colliderect(enemy.rect):
+                        enemy.take_health(self.weapon.damage)
+                        round.is_alive = False
+                        enemy.handle_health()
+            
+            i += self.max_round_comparisons_per_frame
+            j += self.max_round_comparisons_per_frame
+
+            if j > len(self.weapon.rounds):
+                i = 0
+                j = self.max_round_comparisons_per_frame
+            
+            yield
+        
+        yield
 
 
 
@@ -1439,6 +1684,10 @@ class Powerup:
     @abstractmethod
     def effect(self):
         pass
+    
+    def activate(self):
+        self.active = True
+        self.rect = None
 
 
 
@@ -1450,8 +1699,7 @@ class PowerupWeapon(Powerup):
 
     def handle_collision(self):
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
-            self.active = True
-            self.rect = None
+            self.activate()
     
     def effect(self):
         self.currentLevel.player.weapon = self.weapon
@@ -1473,8 +1721,7 @@ class PowerupHealth(Powerup):
 
     def handle_collision(self):
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
-            self.active = True
-            self.rect = None
+            self.activate()
             
     def effect(self):
         self.currentLevel.player.give_health(self.health_value)
@@ -1491,8 +1738,7 @@ class PowerupShield(Powerup):
 
     def handle_collision(self):
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
-            self.active = True
-            self.rect = None
+            self.activate()
     
     def effect(self):
         self.duration -= self.currentLevel.dt
@@ -1521,10 +1767,8 @@ class PowerupDamageBoost(Powerup):
         self.image = pg.transform.scale(pg.transform.rotate(pg.image.load(self.image_path), self.angle), (self.width, self.height))
 
     def handle_collision(self):
-        
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
-            self.active = True
-            self.rect = None
+            self.activate()
     
     def effect(self):
         self.duration -= self.currentLevel.dt
@@ -1621,10 +1865,12 @@ class Meteorite(Ship):
 
         self.currentLevel.parent.screen.blit(self.image, self.rect)
 
-    def handle_collision(self):
+    def collide(self, player: Player):
+        player.take_health(self.damage)
+        self.is_alive = False
 
+    def handle_collision(self):
         if self.currentLevel.player.rect and self.rect.colliderect(self.currentLevel.player.rect):
-            self.currentLevel.player.take_health(self.damage)
-            self.is_alive = False
+            self.collide(self.currentLevel.player)
     
         
